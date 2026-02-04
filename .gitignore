@@ -1,0 +1,26 @@
+# Secrets (wachtwoorden, local keys)
+secrets.h
+
+# Installers en binaries
+*.exe
+*.msi
+*.dmg
+*.app
+
+# Arduino IDE build
+build/
+*.elf
+*.bin
+*.hex
+
+# OS bestanden
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor bestanden
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
