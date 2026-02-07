@@ -1,9 +1,14 @@
 // ═══════════════════════════════════════════════════════════════════
-//  Woonkamer Lamp Controller v1.0 -Koen Verhallen
+//  Woonkamer Lamp Controller v1.1 -Koen Verhallen
 //
 //  ESP32 projectje om de Action lampen in de woonkamer te bedienen
-//  met een drukknop. Simpele versie: kort drukken wisselt tussen
-//  lampen, en weer uit.
+//  met een drukknop. Nu met knopdetectie: kort, lang en dubbel
+//  drukken.
+//
+//  Wat doet het:
+//    Kort drukken  → wissel tussen lampen
+//    Lang drukken  → dimmen (omlaag / omhoog afwisselend)
+//    Dubbel druk   → alles uit
 //
 //  Hardware: ESP32 DevKit V1 + drukknop op GPIO4
 // ═══════════════════════════════════════════════════════════════════
@@ -38,15 +43,22 @@ Lamp lampen[] = {
 const int AANTAL_LAMPEN = sizeof(lampen) / sizeof(lampen[0]);
 
 // ── Knop instellingen ────────────────────────────────────────────
-#define KNOP_PIN      4
-#define DEBOUNCE_MS   50
+#define KNOP_PIN        4
+#define DEBOUNCE_MS     50
+#define LANG_DRUK_MS    800    // langer dan 800ms = lang drukken
+#define DUBBEL_WINDOW   400    // binnen 400ms nogmaals = dubbel
 
 // ── Huidige status ───────────────────────────────────────────────
 int  activeLamp      = -1;     // -1 = alles uit
 int  helderheid      = 100;    // 0-100 %
 bool lampAan[3]      = {false};
-bool wasIngedrukt    = false;
-unsigned long knopNeerTijd = 0;
+bool dimRichting     = false;  // false = omlaag, true = omhoog
+
+// Knop timing
+unsigned long knopNeerTijd   = 0;
+unsigned long knopLosTijd    = 0;
+bool          wasIngedrukt   = false;
+bool          wachtOpDubbel  = false;
 
 // ── Lamp aansturen via Tuya ──────────────────────────────────────
 
@@ -82,7 +94,56 @@ void allesUit() {
   }
   activeLamp = -1;
   helderheid = 100;
+  dimRichting = false;
   Serial.println("Alles uit.");
+}
+
+// ── Wat de knop doet ─────────────────────────────────────────────
+
+// Kort drukken: wissel naar de volgende lamp (of alles uit)
+void actieKort() {
+  int vorigeActief = activeLamp;
+
+  activeLamp++;
+  if (activeLamp >= AANTAL_LAMPEN) activeLamp = -1;
+
+  if (activeLamp == -1) {
+    allesUit();
+  } else {
+    if (vorigeActief >= 0 && vorigeActief != activeLamp) {
+      stuurAanUit(vorigeActief, false);
+    }
+    helderheid = 100;
+    dimRichting = false;
+    stuurHelderheid(activeLamp, helderheid);
+    Serial.printf("Nu actief: %s\n", lampen[activeLamp].naam);
+  }
+}
+
+// Lang drukken: dim de actieve lamp (afwisselend omlaag/omhoog)
+void actieLang() {
+  if (activeLamp < 0) {
+    Serial.println("Niks aan, kan niet dimmen.");
+    return;
+  }
+
+  if (dimRichting) {
+    // Omhoog
+    helderheid = min(100, helderheid + 20);
+    if (helderheid >= 100) dimRichting = false;
+  } else {
+    // Omlaag
+    helderheid = max(10, helderheid - 20);
+    if (helderheid <= 10) dimRichting = true;
+  }
+
+  stuurHelderheid(activeLamp, helderheid);
+}
+
+// Dubbel drukken: alles uit
+void actieDubbel() {
+  allesUit();
+  Serial.println("Dubbel gedrukt, alles uit.");
 }
 
 // ── Setup ────────────────────────────────────────────────────────
@@ -90,7 +151,7 @@ void allesUit() {
 void setup() {
   Serial.begin(115200);
   delay(500);
-  Serial.println("\n=== Woonkamer Lamp Controller v1.0 -Koen Verhallen ===");
+  Serial.println("\n=== Woonkamer Lamp Controller v1.1 -Koen Verhallen ===");
 
   // Knop instellen
   pinMode(KNOP_PIN, INPUT_PULLUP);
@@ -105,7 +166,9 @@ void setup() {
   Serial.printf("\nVerbonden! IP: %s\n", WiFi.localIP().toString().c_str());
 
   Serial.println("Klaar!");
-  Serial.println("  Kort drukken = volgende lamp (of alles uit)");
+  Serial.println("  Kort drukken   = volgende lamp");
+  Serial.println("  Lang drukken   = dimmen (omlaag/omhoog)");
+  Serial.println("  Dubbel drukken = alles uit");
 }
 
 // ── Loop ─────────────────────────────────────────────────────────
@@ -114,7 +177,7 @@ void loop() {
   bool ingedrukt = (digitalRead(KNOP_PIN) == LOW);
   unsigned long nu = millis();
 
-  // Knop ingedrukt (met debounce)
+  // Knop ingedrukt
   if (ingedrukt && !wasIngedrukt) {
     delay(DEBOUNCE_MS);
     if (digitalRead(KNOP_PIN) == LOW) {
@@ -122,24 +185,29 @@ void loop() {
     }
   }
 
-  // Knop losgelaten → wissel lamp
+  // Knop losgelaten
   if (!ingedrukt && wasIngedrukt) {
-    int vorigeActief = activeLamp;
+    unsigned long duur = nu - knopNeerTijd;
 
-    activeLamp++;
-    if (activeLamp >= AANTAL_LAMPEN) activeLamp = -1;
+    if (duur >= LANG_DRUK_MS) {
+      actieLang();
+      wachtOpDubbel = false;
 
-    if (activeLamp == -1) {
-      allesUit();
     } else {
-      // Vorige lamp uit als die aan stond
-      if (vorigeActief >= 0 && vorigeActief != activeLamp) {
-        stuurAanUit(vorigeActief, false);
+      if (wachtOpDubbel && (nu - knopLosTijd) < DUBBEL_WINDOW) {
+        actieDubbel();
+        wachtOpDubbel = false;
+      } else {
+        wachtOpDubbel = true;
+        knopLosTijd   = nu;
       }
-      helderheid = 100;
-      stuurHelderheid(activeLamp, helderheid);
-      Serial.printf("Nu actief: %s\n", lampen[activeLamp].naam);
     }
+  }
+
+  // Geen tweede druk gekomen, dan was het een korte druk
+  if (wachtOpDubbel && (nu - knopLosTijd) >= DUBBEL_WINDOW) {
+    actieKort();
+    wachtOpDubbel = false;
   }
 
   wasIngedrukt = ingedrukt;
