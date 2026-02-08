@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
+  <metadata>
+    <title>Concept Design — Woonkamer Lamp Controller</title>
+    <creator>Koen Verhallen</creator>
+    <date>2026</date>
+  </metadata>
+  <defs>
+    <style>
+      text { font-family: 'Segoe UI', Helvetica, Arial, sans-serif; }
+      .title { font-size: 18px; font-weight: bold; fill: #222; }
+      .subtitle { font-size: 12px; fill: #666; }
+      .dim { font-size: 9px; fill: #888; }
+      .note { font-size: 10px; fill: #555; }
+      .callout { font-size: 9px; fill: #336699; }
+    </style>
+    <!-- Gradient voor behuizing body -->
+    <linearGradient id="bodyGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f5f5f5"/>
+      <stop offset="40%" stop-color="#e8e8e8"/>
+      <stop offset="100%" stop-color="#cccccc"/>
+    </linearGradient>
+    <linearGradient id="bodyGradSide" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#d0d0d0"/>
+      <stop offset="100%" stop-color="#b0b0b0"/>
+    </linearGradient>
+    <linearGradient id="btnGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#e0e0e0"/>
+      <stop offset="50%" stop-color="#c8c8c8"/>
+      <stop offset="100%" stop-color="#b0b0b0"/>
+    </linearGradient>
+    <linearGradient id="ledRing" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#66aaff"/>
+      <stop offset="100%" stop-color="#2266cc"/>
+    </linearGradient>
+    <radialGradient id="btnHighlight" cx="0.4" cy="0.35" r="0.6">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.6)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+    </radialGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="3" dy="5" stdDeviation="6" flood-opacity="0.2"/>
+    </filter>
+    <filter id="btnShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.3"/>
+    </filter>
+    <filter id="ledGlow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Achtergrond -->
+  <rect width="800" height="600" fill="#fafafa"/>
+
+  <!-- Titel -->
+  <text x="400" y="35" text-anchor="middle" class="title">Woonkamer Lamp Controller — Concept Design</text>
+  <text x="400" y="52" text-anchor="middle" class="subtitle">Koen Verhallen — 2026</text>
+
+  <!-- ==================== VOORAANZICHT (3D perspectief) ==================== -->
+  <text x="200" y="85" text-anchor="middle" class="subtitle" font-weight="bold">Vooraanzicht</text>
+
+  <g transform="translate(105, 95)" filter="url(#shadow)">
+    <!-- Behuizing body - afgeronde rechthoek, licht 3D -->
+    <rect x="0" y="0" width="190" height="310" rx="18" ry="18" fill="url(#bodyGrad)" stroke="#aaa" stroke-width="0.5"/>
+
+    <!-- Subtiele rand/groef rondom -->
+    <rect x="6" y="6" width="178" height="298" rx="14" ry="14" fill="none" stroke="#ddd" stroke-width="0.5"/>
+
+    <!-- Grote drukknop (centraal, bovenste helft) -->
+    <g filter="url(#btnShadow)">
+      <circle cx="95" cy="120" r="32" fill="url(#btnGrad)" stroke="#999" stroke-width="1"/>
+      <!-- LED ring -->
+      <circle cx="95" cy="120" r="28" fill="none" stroke="url(#ledRing)" stroke-width="2.5" filter="url(#ledGlow)"/>
+      <!-- Highlight -->
+      <circle cx="95" cy="120" r="30" fill="url(#btnHighlight)"/>
+      <!-- Knop symbool (power icon) -->
+      <circle cx="95" cy="122" r="10" fill="none" stroke="#666" stroke-width="1.5"/>
+      <line x1="95" y1="108" x2="95" y2="118" stroke="#666" stroke-width="2" stroke-linecap="round"/>
+    </g>
+
+    <!-- Status LEDs (3 kleine stippen onder de knop) -->
+    <circle cx="75" cy="195" r="4" fill="#ff6644" opacity="0.9" filter="url(#ledGlow)"/>
+    <circle cx="95" cy="195" r="4" fill="#44cc55" opacity="0.9" filter="url(#ledGlow)"/>
+    <circle cx="115" cy="195" r="4" fill="#4488ff" opacity="0.9" filter="url(#ledGlow)"/>
+
+    <!-- Labels onder LEDs -->
+    <text x="75" y="215" text-anchor="middle" class="dim">1</text>
+    <text x="95" y="215" text-anchor="middle" class="dim">2</text>
+    <text x="115" y="215" text-anchor="middle" class="dim">3</text>
+
+    <!-- Koen logo / tekst onderaan -->
+    <text x="95" y="275" text-anchor="middle" font-size="8" fill="#bbb" font-family="Segoe UI, sans-serif" letter-spacing="3">LAMP CTRL</text>
+    <line x1="55" y1="282" x2="135" y2="282" stroke="#ddd" stroke-width="0.5"/>
+    <text x="95" y="296" text-anchor="middle" font-size="7" fill="#ccc" font-family="Segoe UI, sans-serif">K. VERHALLEN</text>
+  </g>
+
+  <!-- Callout lijnen vooraanzicht -->
+  <line x1="305" y1="215" x2="345" y2="215" stroke="#336699" stroke-width="0.5" stroke-dasharray="2,2"/>
+  <circle cx="305" cy="215" r="2" fill="#336699"/>
+  <text x="350" y="210" class="callout">16mm metalen drukknop</text>
+  <text x="350" y="222" class="callout">met blauwe LED-ring</text>
+
+  <line x1="305" y1="290" x2="345" y2="275" stroke="#336699" stroke-width="0.5" stroke-dasharray="2,2"/>
+  <circle cx="305" cy="290" r="2" fill="#336699"/>
+  <text x="350" y="272" class="callout">3x status LED (per lamp)</text>
+
+  <line x1="305" y1="380" x2="345" y2="370" stroke="#336699" stroke-width="0.5" stroke-dasharray="2,2"/>
+  <text x="350" y="367" class="callout">ABS behuizing 130x70x25mm</text>
+  <text x="350" y="379" class="callout">mat wit, afgeronde hoeken</text>
+
+  <!-- ==================== ZIJAANZICHT ==================== -->
+  <text x="620" y="85" text-anchor="middle" class="subtitle" font-weight="bold">Zijaanzicht</text>
+
+  <g transform="translate(575, 95)" filter="url(#shadow)">
+    <!-- Zijkant body -->
+    <rect x="0" y="0" width="25" height="310" rx="4" ry="4" fill="url(#bodyGradSide)" stroke="#aaa" stroke-width="0.5"/>
+
+    <!-- Uitstekende knop -->
+    <rect x="-3" y="100" width="6" height="40" rx="2" fill="#c0c0c0" stroke="#999" stroke-width="0.5"/>
+
+    <!-- USB poort onderkant -->
+    <rect x="5" y="290" width="15" height="8" rx="1" fill="#555" stroke="#444" stroke-width="0.5"/>
+
+    <!-- Wandbeugel achter -->
+    <rect x="22" y="60" width="8" height="190" rx="2" fill="#e0ddd8" stroke="#bbb" stroke-width="0.5"/>
+  </g>
+
+  <!-- Callout lijnen zijaanzicht -->
+  <line x1="610" y1="240" x2="640" y2="240" stroke="#336699" stroke-width="0.5" stroke-dasharray="2,2"/>
+  <text x="645" y="237" class="callout">Knop uitsteek</text>
+  <text x="645" y="249" class="callout">~3mm</text>
+
+  <line x1="610" y1="390" x2="640" y2="395" stroke="#336699" stroke-width="0.5" stroke-dasharray="2,2"/>
+  <text x="645" y="392" class="callout">Micro-USB (opladen)</text>
+
+  <line x1="615" y1="250" x2="650" y2="290" stroke="#336699" stroke-width="0.5" stroke-dasharray="2,2"/>
+  <text x="645" y="300" class="callout">Wandbeugel</text>
+  <text x="645" y="312" class="callout">(afneembaar)</text>
+
+  <!-- ==================== ONDERKANT ==================== -->
+  <text x="200" y="445" text-anchor="middle" class="subtitle" font-weight="bold">Onderkant</text>
+
+  <g transform="translate(105, 455)">
+    <rect x="0" y="0" width="190" height="25" rx="4" fill="#d8d8d8" stroke="#aaa" stroke-width="0.5"/>
+    <!-- USB opening -->
+    <rect x="82" y="3" width="26" height="10" rx="2" fill="#555"/>
+    <text x="95" y="10" text-anchor="middle" font-size="6" fill="#ddd">USB</text>
+    <!-- Reset knopje -->
+    <circle cx="160" cy="12" r="3" fill="#c0c0c0" stroke="#999" stroke-width="0.5"/>
+    <text x="160" y="23" text-anchor="middle" class="dim">RST</text>
+  </g>
+
+  <!-- ==================== ACHTERKANT ==================== -->
+  <text x="500" y="445" text-anchor="middle" class="subtitle" font-weight="bold">Achterkant (wandbeugel)</text>
+
+  <g transform="translate(410, 455)">
+    <rect x="0" y="0" width="180" height="100" rx="6" fill="#e8e4df" stroke="#bbb" stroke-width="0.5"/>
+    <!-- Schroefgaten -->
+    <circle cx="30" cy="20" r="5" fill="none" stroke="#999" stroke-width="1"/>
+    <circle cx="30" cy="20" r="1.5" fill="#999"/>
+    <circle cx="150" cy="20" r="5" fill="none" stroke="#999" stroke-width="1"/>
+    <circle cx="150" cy="20" r="1.5" fill="#999"/>
+    <circle cx="30" cy="80" r="5" fill="none" stroke="#999" stroke-width="1"/>
+    <circle cx="30" cy="80" r="1.5" fill="#999"/>
+    <circle cx="150" cy="80" r="5" fill="none" stroke="#999" stroke-width="1"/>
+    <circle cx="150" cy="80" r="1.5" fill="#999"/>
+
+    <!-- Geleider rail (voor schuif-montage) -->
+    <rect x="60" y="30" width="60" height="40" rx="3" fill="none" stroke="#aaa" stroke-width="1" stroke-dasharray="3,2"/>
+    <text x="90" y="54" text-anchor="middle" class="dim">Schuif-</text>
+    <text x="90" y="64" text-anchor="middle" class="dim">montage</text>
+
+    <!-- Labels -->
+    <text x="30" y="98" text-anchor="middle" class="dim">M4</text>
+    <text x="150" y="98" text-anchor="middle" class="dim">M4</text>
+  </g>
+
+  <!-- ==================== Kleurvarianten ==================== -->
+  <text x="400" y="582" text-anchor="middle" class="note">Beschikbaar in: mat wit (standaard) | mat zwart | lichtgrijs</text>
+
+  <!-- Footer -->
+  <text x="790" y="595" text-anchor="end" class="dim">Koen Verhallen — 2026</text>
+</svg>
