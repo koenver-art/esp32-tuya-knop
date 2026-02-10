@@ -1,28 +1,27 @@
 // ═══════════════════════════════════════════════════════════════════
-//  Woonkamer Lamp Controller v1.1 -Koen Verhallen
+//  Woonkamer Lamp Controller v1.2 -Koen Verhallen
 //
 //  ESP32 projectje om de Action lampen in de woonkamer te bedienen
-//  met een drukknop. Nu met knopdetectie: kort, lang en dubbel
-//  drukken.
+//  met een drukknop. Nu met WiFi Manager zodat je het netwerk via
+//  je telefoon kunt instellen in plaats van hardcoded.
 //
 //  Wat doet het:
 //    Kort drukken  → wissel tussen lampen
 //    Lang drukken  → dimmen (omlaag / omhoog afwisselend)
 //    Dubbel druk   → alles uit
 //
+//  Features:
+//    - WiFi Manager (configuratie via telefoon)
+//
 //  Hardware: ESP32 DevKit V1 + drukknop op GPIO4
 // ═══════════════════════════════════════════════════════════════════
 
 #include <WiFi.h>
+#include <WiFiManager.h>
 #include <ArduinoJson.h>
 #include "EspTuya.h"
 
-// ── WiFi instellingen ────────────────────────────────────────────
-const char* WIFI_SSID = "jouw_wifi_netwerk";
-const char* WIFI_PASS = "jouw_wachtwoord";
-
 // ── Tuya DataPoints ──────────────────────────────────────────────
-// Specifiek voor de Action LSC Smart Connect lampen
 #define DP_POWER  20   // aan/uit (bool)
 #define DP_DIM    22   // helderheid (int, 10-1000)
 
@@ -60,31 +59,29 @@ unsigned long knopLosTijd    = 0;
 bool          wasIngedrukt   = false;
 bool          wachtOpDubbel  = false;
 
+// WiFi
+WiFiManager wifiManager;
+
 // ── Lamp aansturen via Tuya ──────────────────────────────────────
 
 void stuurAanUit(int idx, bool aan) {
   Serial.printf("[%s] → %s\n", lampen[idx].naam, aan ? "AAN" : "UIT");
-
   EspTuya tuya;
   tuya.begin(lampen[idx].ip, lampen[idx].localKey, lampen[idx].versie);
   tuya.setBool(DP_POWER, aan);
-
   lampAan[idx] = aan;
 }
 
 void stuurHelderheid(int idx, int pct) {
   int tuyaWaarde = map(pct, 0, 100, 10, 1000);
   Serial.printf("[%s] dim → %d%% (tuya: %d)\n", lampen[idx].naam, pct, tuyaWaarde);
-
   EspTuya tuya;
   tuya.begin(lampen[idx].ip, lampen[idx].localKey, lampen[idx].versie);
-
   if (!lampAan[idx]) {
     tuya.setBool(DP_POWER, true);
     lampAan[idx] = true;
     delay(200);
   }
-
   tuya.setInt(DP_DIM, tuyaWaarde);
 }
 
@@ -103,7 +100,6 @@ void allesUit() {
 // Kort drukken: wissel naar de volgende lamp (of alles uit)
 void actieKort() {
   int vorigeActief = activeLamp;
-
   activeLamp++;
   if (activeLamp >= AANTAL_LAMPEN) activeLamp = -1;
 
@@ -126,17 +122,13 @@ void actieLang() {
     Serial.println("Niks aan, kan niet dimmen.");
     return;
   }
-
   if (dimRichting) {
-    // Omhoog
     helderheid = min(100, helderheid + 20);
     if (helderheid >= 100) dimRichting = false;
   } else {
-    // Omlaag
     helderheid = max(10, helderheid - 20);
     if (helderheid <= 10) dimRichting = true;
   }
-
   stuurHelderheid(activeLamp, helderheid);
 }
 
@@ -146,24 +138,35 @@ void actieDubbel() {
   Serial.println("Dubbel gedrukt, alles uit.");
 }
 
+// ── WiFi verbinding (via WiFi Manager) ───────────────────────────
+
+void verbindWiFi() {
+  wifiManager.setConfigPortalTimeout(120);
+  wifiManager.setAPCallback([](WiFiManager* mgr) {
+    Serial.println("WiFi niet geconfigureerd.");
+    Serial.println("Verbind met 'LampController-Setup' op je telefoon.");
+  });
+
+  // Probeert opgeslagen WiFi, anders opent configuratie portaal
+  if (!wifiManager.autoConnect("LampController-Setup")) {
+    Serial.println("WiFi configuratie mislukt, herstart...");
+    delay(3000);
+    ESP.restart();
+  }
+  Serial.printf("Verbonden! IP: %s\n", WiFi.localIP().toString().c_str());
+}
+
 // ── Setup ────────────────────────────────────────────────────────
 
 void setup() {
   Serial.begin(115200);
   delay(500);
-  Serial.println("\n=== Woonkamer Lamp Controller v1.1 -Koen Verhallen ===");
+  Serial.println("\n=== Woonkamer Lamp Controller v1.2 -Koen Verhallen ===");
 
-  // Knop instellen
   pinMode(KNOP_PIN, INPUT_PULLUP);
 
-  // WiFi verbinden
-  Serial.printf("Verbinden met %s", WIFI_SSID);
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.printf("\nVerbonden! IP: %s\n", WiFi.localIP().toString().c_str());
+  // WiFi (via WiFi Manager portaal)
+  verbindWiFi();
 
   Serial.println("Klaar!");
   Serial.println("  Kort drukken   = volgende lamp");
@@ -174,6 +177,12 @@ void setup() {
 // ── Loop ─────────────────────────────────────────────────────────
 
 void loop() {
+  // WiFi check
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi weg, herverbinden...");
+    verbindWiFi();
+  }
+
   bool ingedrukt = (digitalRead(KNOP_PIN) == LOW);
   unsigned long nu = millis();
 
@@ -192,7 +201,6 @@ void loop() {
     if (duur >= LANG_DRUK_MS) {
       actieLang();
       wachtOpDubbel = false;
-
     } else {
       if (wachtOpDubbel && (nu - knopLosTijd) < DUBBEL_WINDOW) {
         actieDubbel();
