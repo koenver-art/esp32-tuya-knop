@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════
-//  Woonkamer Lamp Controller v1.4 -Koen Verhallen
+//  Woonkamer Lamp Controller v2.0 -Koen Verhallen
 //
 //  Mijn ESP32 projectje om de Action lampen in de woonkamer te
 //  bedienen met een enkele drukknop. Geen cloud, geen app, gewoon
@@ -15,8 +15,8 @@
 //    - OTA firmware updates via WiFi
 //    - Deep sleep met wake-up via knop
 //    - Batterij monitoring met LED waarschuwing
-//    - Status LEDs
 //    - Foutafhandeling bij onbereikbare lampen
+//    - MQTT voor Home Assistant integratie
 //
 //  Hardware: ESP32 DevKit V1 + drukknop op GPIO4
 // ═══════════════════════════════════════════════════════════════════
@@ -25,6 +25,7 @@
 #include <WiFiManager.h>
 #include <ArduinoOTA.h>
 #include <ArduinoJson.h>
+#include <PubSubClient.h>
 #include <Preferences.h>
 #include "EspTuya.h"
 
@@ -32,12 +33,13 @@
 #define FEATURE_OTA          true
 #define FEATURE_DEEP_SLEEP   true
 #define FEATURE_BATTERIJ     true
+#define FEATURE_MQTT         true
 
 // ── Tuya DataPoints ──────────────────────────────────────────────
 #define DP_POWER  20   // aan/uit (bool)
 #define DP_DIM    22   // helderheid (int, 10-1000)
 
-// ── Lampen ───────────────────────────────────────────────────────
+// ── Lampen in de woonkamer ───────────────────────────────────────
 struct Lamp {
   const char* naam;
   const char* ip;
@@ -63,11 +65,12 @@ const int AANTAL_LAMPEN = sizeof(lampen) / sizeof(lampen[0]);
 const int ledPinnen[] = { LED_1_PIN, LED_2_PIN, LED_3_PIN };
 
 // ── Knop timing ─────────────────────────────────────────────────
-#define LANG_DRUK_MS    800
-#define DUBBEL_WINDOW   400
+#define LANG_DRUK_MS    800    // langer dan 800ms = lang drukken
+#define DUBBEL_WINDOW   400    // binnen 400ms nogmaals = dubbel
 #define DEBOUNCE_MS     50
 
-#define SLAAP_TIMEOUT_MS  60000   // deep sleep na 60s inactiviteit
+// ── Deep sleep ──────────────────────────────────────────────────
+#define SLAAP_TIMEOUT_MS  60000   // na 60s zonder activiteit → slapen
 
 // ── Batterij ────────────────────────────────────────────────────
 #define BAT_LAAG_VOLT    3.3
@@ -76,22 +79,34 @@ const int ledPinnen[] = { LED_1_PIN, LED_2_PIN, LED_3_PIN };
 #define BAT_ADC_FACTOR   2.0      // spanningsdeler 100kΩ + 100kΩ
 #define BAT_ADC_REF      3.3
 
+// ── MQTT (Home Assistant) ───────────────────────────────────────
+#define MQTT_SERVER      "homeassistant.local"
+#define MQTT_PORT        1883
+#define MQTT_USER        ""
+#define MQTT_PASS        ""
+#define MQTT_TOPIC_BASE  "woonkamer/lampcontroller"
+
 // ── Huidige status ──────────────────────────────────────────────
 int  activeLamp      = -1;     // -1 = alles uit
 int  helderheid      = 100;    // 0-100 %
 bool lampAan[3]      = {false};
 bool dimRichting     = false;  // false = omlaag, true = omhoog
 
+// Knop timing
 unsigned long knopNeerTijd   = 0;
 unsigned long knopLosTijd    = 0;
 bool          wasIngedrukt   = false;
 bool          wachtOpDubbel  = false;
 
+// Timers
 unsigned long laatsteActiviteit = 0;
 unsigned long laatsteBatCheck   = 0;
 float         batterijVolt      = 4.2;
 
+// WiFi & MQTT
 WiFiManager   wifiManager;
+WiFiClient    espClient;
+PubSubClient  mqtt(espClient);
 Preferences   prefs;
 
 // ── Status LEDs ─────────────────────────────────────────────────
@@ -139,6 +154,7 @@ bool stuurAanUit(int idx, bool aan) {
 
   lampAan[idx] = aan;
   updateLEDs();
+  publiceerStatus();
   return true;
 }
 
@@ -167,6 +183,7 @@ bool stuurHelderheid(int idx, int pct) {
   }
 
   updateLEDs();
+  publiceerStatus();
   return true;
 }
 
@@ -245,6 +262,8 @@ void checkBatterij() {
     knipperAlleLEDs(3, 150);
     updateLEDs();
   }
+
+  publiceerBatterij();
 }
 
 // ── Deep sleep ──────────────────────────────────────────────────
@@ -257,6 +276,84 @@ void gaSlapen() {
 
   esp_sleep_enable_ext0_wakeup((gpio_num_t)KNOP_PIN, LOW);
   esp_deep_sleep_start();
+}
+
+// ── MQTT (Home Assistant) ───────────────────────────────────────
+void mqttVerbind() {
+  if (!FEATURE_MQTT) return;
+  if (mqtt.connected()) return;
+  if (strlen(MQTT_SERVER) == 0) return;
+
+  Serial.printf("MQTT verbinden met %s...\n", MQTT_SERVER);
+  String clientId = "lamp-ctrl-" + String(WiFi.macAddress());
+
+  bool ok;
+  if (strlen(MQTT_USER) > 0) {
+    ok = mqtt.connect(clientId.c_str(), MQTT_USER, MQTT_PASS);
+  } else {
+    ok = mqtt.connect(clientId.c_str());
+  }
+
+  if (ok) {
+    Serial.println("MQTT verbonden!");
+    mqtt.subscribe(MQTT_TOPIC_BASE "/cmd");
+    publiceerStatus();
+    publiceerBatterij();
+  } else {
+    Serial.printf("MQTT mislukt, rc=%d\n", mqtt.state());
+  }
+}
+
+void mqttCallback(char* topic, byte* payload, unsigned int length) {
+  String bericht = "";
+  for (unsigned int i = 0; i < length; i++) bericht += (char)payload[i];
+
+  Serial.printf("MQTT ontvangen [%s]: %s\n", topic, bericht.c_str());
+
+  // Simpele commando's: "lamp1_on", "lamp1_off", "lamp2_dim_50", "alles_uit"
+  if (bericht == "alles_uit") {
+    allesUit();
+  }
+  else if (bericht.startsWith("lamp") && bericht.length() >= 6) {
+    int idx = bericht.charAt(4) - '1';
+    if (idx >= 0 && idx < AANTAL_LAMPEN) {
+      if (bericht.indexOf("_on") > 0) {
+        stuurAanUit(idx, true);
+      } else if (bericht.indexOf("_off") > 0) {
+        stuurAanUit(idx, false);
+      } else if (bericht.indexOf("_dim_") > 0) {
+        int pct = bericht.substring(bericht.lastIndexOf('_') + 1).toInt();
+        if (pct >= 0 && pct <= 100) stuurHelderheid(idx, pct);
+      }
+    }
+  }
+}
+
+void publiceerStatus() {
+  if (!FEATURE_MQTT || !mqtt.connected()) return;
+
+  StaticJsonDocument<256> doc;
+  doc["actief"] = activeLamp;
+  doc["helderheid"] = helderheid;
+
+  JsonArray arr = doc.createNestedArray("lampen");
+  for (int i = 0; i < AANTAL_LAMPEN; i++) {
+    JsonObject lamp = arr.createNestedObject();
+    lamp["naam"] = lampen[i].naam;
+    lamp["aan"] = lampAan[i];
+  }
+
+  char buf[256];
+  serializeJson(doc, buf, sizeof(buf));
+  mqtt.publish(MQTT_TOPIC_BASE "/status", buf, true);
+}
+
+void publiceerBatterij() {
+  if (!FEATURE_MQTT || !mqtt.connected() || !FEATURE_BATTERIJ) return;
+
+  char buf[32];
+  snprintf(buf, sizeof(buf), "%.2f", batterijVolt);
+  mqtt.publish(MQTT_TOPIC_BASE "/batterij", buf, true);
 }
 
 // ── WiFi verbinding (via WiFi Manager) ──────────────────────────
@@ -280,6 +377,7 @@ void verbindWiFi() {
 // ── OTA updates ─────────────────────────────────────────────────
 void setupOTA() {
   if (!FEATURE_OTA) return;
+
   ArduinoOTA.setHostname("lamp-controller");
   ArduinoOTA.onStart([]() {
     Serial.println("OTA update gestart...");
@@ -302,17 +400,20 @@ void setupOTA() {
 void setup() {
   Serial.begin(115200);
   delay(500);
-  Serial.println("\n=== Woonkamer Lamp Controller v1.4 -Koen Verhallen ===");
+  Serial.println("\n=== Woonkamer Lamp Controller v2.0 -Koen Verhallen ===");
+
   // Check of we wakker worden uit deep sleep
   if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0) {
     Serial.println("Wakker geworden door knop!");
   }
+
   // Pinnen instellen
   pinMode(KNOP_PIN, INPUT_PULLUP);
   for (int i = 0; i < 3; i++) {
     pinMode(ledPinnen[i], OUTPUT);
     digitalWrite(ledPinnen[i], LOW);
   }
+
   // Opstart animatie
   for (int i = 0; i < 3; i++) {
     digitalWrite(ledPinnen[i], HIGH);
@@ -323,14 +424,25 @@ void setup() {
     delay(150);
   }
 
+  // WiFi (via WiFi Manager portaal)
   verbindWiFi();
+
+  // OTA updates
   setupOTA();
+
+  // MQTT
+  if (FEATURE_MQTT) {
+    mqtt.setServer(MQTT_SERVER, MQTT_PORT);
+    mqtt.setCallback(mqttCallback);
+    mqttVerbind();
+  }
 
   // Batterij eerste meting
   if (FEATURE_BATTERIJ) {
     analogReadResolution(12);
     checkBatterij();
   }
+
   laatsteActiviteit = millis();
 
   Serial.println("Klaar!");
@@ -339,12 +451,19 @@ void setup() {
   Serial.println("  Dubbel drukken = alles uit");
   if (FEATURE_OTA)        Serial.println("  OTA updates    = aan");
   if (FEATURE_DEEP_SLEEP) Serial.printf( "  Deep sleep     = na %ds inactiviteit\n", SLAAP_TIMEOUT_MS / 1000);
+  if (FEATURE_MQTT)       Serial.printf( "  MQTT           = %s\n", MQTT_SERVER);
 }
 
 // ── Loop ────────────────────────────────────────────────────────
 void loop() {
   // OTA afhandelen
   if (FEATURE_OTA) ArduinoOTA.handle();
+
+  // MQTT afhandelen
+  if (FEATURE_MQTT) {
+    if (!mqtt.connected()) mqttVerbind();
+    mqtt.loop();
+  }
 
   // WiFi check
   if (WiFi.status() != WL_CONNECTED) {
