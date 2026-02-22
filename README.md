@@ -170,6 +170,66 @@ Knop --> Debounce --> Kort/Lang/Dubbel --> Status Update --> EspTuya --> Lamp (L
 | **Netwerk** | WiFi Manager, OTA, MQTT | Configuratie, updates, Home Assistant |
 | **Power** | Deep sleep + batterij monitor | Energiebesparing, bescherming |
 
+### Knop State Machine
+
+De drukknop wordt afgehandeld als een state machine met drie timers: debounce (50ms), lang-druk detectie (800ms) en dubbel-druk venster (400ms). Hieronder het volledige state diagram:
+
+```mermaid
+stateDiagram-v2
+    [*] --> Idle
+
+    Idle --> Debounce : Knop ingedrukt
+
+    Debounce --> Idle : Loslaten < 50ms<br/>(vals signaal)
+    Debounce --> Ingedrukt : Nog steeds ingedrukt<br/>na 50ms
+
+    Ingedrukt --> LangDrukken : Vastgehouden > 800ms
+    Ingedrukt --> WachtOpDubbel : Losgelaten < 800ms
+
+    LangDrukken --> Idle : Losgelaten
+
+    WachtOpDubbel --> DubbelDruk : Opnieuw ingedrukt<br/>binnen 400ms
+    WachtOpDubbel --> KortDruk : Timeout 400ms<br/>(geen tweede druk)
+
+    KortDruk --> Idle
+    DubbelDruk --> Idle
+    LangDrukken --> LangDrukken : Elke 800ms vastgehouden
+
+    state KortDruk {
+        [*] --> VolgendeLamp
+        VolgendeLamp --> UpdateLED
+        UpdateLED --> StuurTuya
+        StuurTuya --> PubliceerMQTT
+    }
+
+    state DubbelDruk {
+        [*] --> AllesUit
+        AllesUit --> ResetLEDs
+        ResetLEDs --> PubliceerUit
+    }
+
+    state LangDrukken {
+        [*] --> CheckRichting
+        CheckRichting --> DimOmlaag : dimRichting = false
+        CheckRichting --> DimOmhoog : dimRichting = true
+        DimOmlaag --> StuurDim
+        DimOmhoog --> StuurDim
+        StuurDim --> WisselRichting : Bij grens 10% of 100%
+    }
+```
+
+| State | Conditie | Actie |
+|-------|----------|-------|
+| **Idle** | Wacht op knop | Niets, check deep sleep timeout |
+| **Debounce** | 50ms wachten | Filter contactdender |
+| **Ingedrukt** | Knop vast | Timer loopt voor lang-druk detectie |
+| **WachtOpDubbel** | Net losgelaten | 400ms venster voor tweede druk |
+| **KortDruk** | Timeout dubbel | `activeLamp++`, vorige uit, nieuwe aan |
+| **LangDrukken** | > 800ms vast | Helderheid +/- 20%, wissel richting bij grens |
+| **DubbelDruk** | 2x binnen 400ms | Alle lampen uit, reset state |
+
+> De variabele `dimRichting` wisselt automatisch bij de grenzen: bij 10% gaat hij omhoog, bij 100% weer omlaag. Zo hoef je maar te blijven vasthouden om heen en weer te dimmen.
+
 ## Foto's
 
 > *Wordt aangevuld met foto's van het bouwproces en eindresultaat.*
