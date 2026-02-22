@@ -58,6 +58,118 @@ De code is opgebouwd in een paar logische lagen. Onderaan zit de **hardware laag
 
 Qua bestanden is het simpel gehouden: `config.h` bevat alle instelbare waarden (timings, pinnen, drempels), `secrets.h` bevat je persoonlijke credentials zoals lamp IP's, keys en MQTT-gegevens (die staat in `.gitignore` en gaat niet mee in git), en `ESP32_Tuya_Knop.ino` bevat de daadwerkelijke logica.
 
+### Software Diagram
+
+```mermaid
+graph TB
+    subgraph Hardware["Hardware"]
+        BTN[Drukknop<br/>GPIO4]
+        LED1[LED 1 - Hoofdlicht<br/>GPIO16]
+        LED2[LED 2 - Sfeerlamp<br/>GPIO17]
+        LED3[LED 3 - Leeslamp<br/>GPIO18]
+        BAT[Batterij ADC<br/>GPIO35]
+    end
+
+    subgraph Knoplogica["Knop Afhandeling"]
+        DEB[Debounce<br/>50ms]
+        KORT[Kort drukken<br/>Volgende lamp]
+        LANG[Lang drukken<br/>Dimmen]
+        DUBBEL[Dubbel drukken<br/>Alles uit]
+    end
+
+    subgraph Core["ESP32 Core"]
+        LOOP[Main Loop<br/>10ms cycle]
+        STATE[Status Bijhouden<br/>activeLamp - helderheid<br/>lampAan - dimRichting]
+    end
+
+    subgraph Netwerk["Netwerk Stack"]
+        WM[WiFi Manager<br/>Auto-connect / AP Portal]
+        OTA[ArduinoOTA<br/>Firmware Updates]
+        MQTT_C[MQTT Client<br/>PubSubClient]
+    end
+
+    subgraph Tuya["Tuya LAN Protocol"]
+        ET[EspTuya Library<br/>TCP - AES-128-ECB]
+        DP20[DP 20: Power<br/>aan/uit]
+        DP22[DP 22: Dim<br/>10-1000]
+    end
+
+    subgraph Lampen["LSC Smart Connect Lampen"]
+        L1[Hoofdlicht<br/>192.168.x.x]
+        L2[Sfeerlamp<br/>192.168.x.x]
+        L3[Leeslamp<br/>192.168.x.x]
+    end
+
+    subgraph Power["Energiebeheer"]
+        SLEEP[Deep Sleep<br/>ext0 wakeup via knop]
+        BATMON[Batterij Monitor<br/>elke 30s]
+    end
+
+    subgraph HA["Home Assistant"]
+        MQTT_S[MQTT Broker]
+        DASH[Dashboard]
+    end
+
+    BTN --> DEB --> KORT & LANG & DUBBEL
+
+    KORT --> STATE
+    LANG --> STATE
+    DUBBEL --> STATE
+
+    STATE --> ET
+    ET --> DP20 & DP22
+    DP20 --> L1 & L2 & L3
+    DP22 --> L1 & L2 & L3
+
+    STATE --> LED1 & LED2 & LED3
+
+    LOOP --> STATE
+    LOOP --> OTA
+    LOOP --> MQTT_C
+    LOOP --> BATMON
+
+    WM -.->|WiFi| ET
+    MQTT_C <-->|status/cmd| MQTT_S
+    MQTT_S <--> DASH
+
+    BAT --> BATMON
+    BATMON -->|kritiek| SLEEP
+    LOOP -->|timeout| SLEEP
+
+    classDef hw fill:#f9a825,stroke:#f57f17,color:#000
+    classDef net fill:#42a5f5,stroke:#1565c0,color:#fff
+    classDef tuya fill:#66bb6a,stroke:#2e7d32,color:#fff
+    classDef core fill:#ab47bc,stroke:#6a1b9a,color:#fff
+    classDef lamp fill:#ffa726,stroke:#e65100,color:#000
+    classDef pwr fill:#ef5350,stroke:#b71c1c,color:#fff
+    classDef ha fill:#26c6da,stroke:#00838f,color:#000
+
+    class BTN,LED1,LED2,LED3,BAT hw
+    class WM,OTA,MQTT_C net
+    class ET,DP20,DP22 tuya
+    class LOOP,STATE,DEB,KORT,LANG,DUBBEL core
+    class L1,L2,L3 lamp
+    class SLEEP,BATMON pwr
+    class MQTT_S,DASH ha
+```
+
+### Dataflow
+
+```
+Knop --> Debounce --> Kort/Lang/Dubbel --> Status Update --> EspTuya --> Lamp (LAN)
+                                               |
+                                        LED Update + MQTT Publiceer
+```
+
+| Laag | Componenten | Taak |
+|------|-------------|------|
+| **Input** | Drukknop (GPIO4) | Kort / lang / dubbel detectie |
+| **Logica** | Main loop + state machine | Lamp selectie, dimmen, alles uit |
+| **Protocol** | EspTuya (TCP/AES) | Tuya v3.3 LAN commando's |
+| **Output** | 3x LED + 3x Lamp | Visuele feedback + lamp aansturing |
+| **Netwerk** | WiFi Manager, OTA, MQTT | Configuratie, updates, Home Assistant |
+| **Power** | Deep sleep + batterij monitor | Energiebesparing, bescherming |
+
 ## Foto's
 
 > *Wordt aangevuld met foto's van het bouwproces en eindresultaat.*
