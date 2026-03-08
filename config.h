@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════
-//  Configuratie -Woonkamer Lamp Controller
+//  Configuratie -Woonkamer Lamp Controller (M5Stack Atom Lite)
 //  Koen Verhallen, 2026
 //
 //  Alle instellingen op één plek. Pas hier aan wat je nodig hebt.
@@ -10,43 +10,42 @@
 #define CONFIG_H
 
 // ── Versie ────────────────────────────────────────────────────────
-#define FIRMWARE_VERSIE  "2.1.0"
+#define FIRMWARE_VERSIE  "3.0.0"
 #define FIRMWARE_NAAM    "Woonkamer Lamp Controller"
 #define DEVICE_ID        "lamp-controller"
 
 // ── Features aan/uit ──────────────────────────────────────────────
 // Zet op false om een feature uit te schakelen
 #define FEATURE_OTA          true
-#define FEATURE_DEEP_SLEEP   true
-#define FEATURE_BATTERIJ     true
 #define FEATURE_MQTT         true
+#define FEATURE_BLE          true     // BLE telefoonbediening (GATT server)
+#define FEATURE_PRESENCE     true     // BLE aanwezigheidsdetectie
+#define FEATURE_ZONBEREKENING true    // Zonsopkomst/-ondergang berekening
 
 // ── Lampen ────────────────────────────────────────────────────────
 #define MAX_LAMPEN  3     // maximaal aantal lampen (pas aan in secrets.h)
 
-// ── Pin definities ────────────────────────────────────────────────
-#define KNOP_PIN        4      // GPIO4  - drukknop (ext0 wakeup)
-#define LED_1_PIN       16     // GPIO16 - status LED Hoofdlicht
-#define LED_2_PIN       17     // GPIO17 - status LED Sfeerlamp
-#define LED_3_PIN       18     // GPIO18 - status LED Leeslamp
-#define BATTERIJ_PIN    35     // GPIO35 - ADC batterijspanning
+// ── Pin definities (M5Stack Atom Lite) ──────────────────────────
+#define KNOP_PIN        39     // G39  - ingebouwde drukknop (actief laag)
+#define RGB_LED_PIN     27     // G27  - ingebouwde SK6812 RGB LED
+// G12 = IR LED (gereserveerd voor toekomstig gebruik)
+// G26/G32 = Grove poort (gereserveerd voor toekomstig gebruik)
+
+// ── RGB LED kleuren per lamp ────────────────────────────────────
+// CRGB formaat (rood, groen, blauw) - pas aan naar smaak
+#define KLEUR_LAMP_1    CRGB(255, 0, 0)      // rood = Hoofdlicht
+#define KLEUR_LAMP_2    CRGB(0, 255, 0)       // groen = Sfeerlamp
+#define KLEUR_LAMP_3    CRGB(0, 0, 255)       // blauw = Leeslamp
+#define KLEUR_ALLES_UIT CRGB(255, 255, 255)   // wit flash bij dubbel druk
+#define KLEUR_FOUT      CRGB(255, 80, 0)      // oranje bij fout
+#define KLEUR_WIFI      CRGB(0, 255, 255)     // cyaan bij WiFi verbinden
+#define KLEUR_BLE       CRGB(128, 0, 255)     // paars bij BLE activiteit
+#define RGB_HELDERHEID  40                     // globale helderheid (0-255)
 
 // ── Knop timing ───────────────────────────────────────────────────
 #define LANG_DRUK_MS    800    // langer dan 800ms = lang drukken
 #define DUBBEL_WINDOW   400    // binnen 400ms nogmaals = dubbel
 #define DEBOUNCE_MS     50
-
-// ── Deep sleep ────────────────────────────────────────────────────
-#define SLAAP_TIMEOUT_MS  60000   // na 60s zonder activiteit → slapen
-#define SLAAP_NA_UIT_MS   5000    // 5s na "alles uit" → slapen
-
-// ── Batterij ──────────────────────────────────────────────────────
-#define BAT_LAAG_VOLT    3.3      // onder 3.3V = waarschuwing
-#define BAT_KRITIEK_VOLT 3.0      // onder 3.0V = uitschakelen
-#define BAT_CHECK_MS     30000    // elke 30s checken
-// Spanningsdeler: 100kΩ + 100kΩ → factor 2
-#define BAT_ADC_FACTOR   2.0
-#define BAT_ADC_REF      3.3
 
 // ── Tuya DataPoints ───────────────────────────────────────────────
 // Specifiek voor de Action LSC Smart Connect lampen
@@ -54,20 +53,49 @@
 #define DP_DIM    22   // helderheid (int, 10-1000)
 #define DP_MODE   21   // modus (white/colour/scene)
 
+// ── BLE configuratie ────────────────────────────────────────────
+#define BLE_DEVICE_NAAM      "LampController"   // naam zichtbaar op telefoon
+#define MAX_BLE_APPARATEN    4                   // max. bekende apparaten
+
+// BLE GATT UUIDs (gegenereerd, uniek voor dit project)
+#define SERVICE_UUID         "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+#define CHAR_LAMP_UUID       "a1b2c3d4-e5f6-7890-abcd-ef1234567891"  // lamp selectie (uint8: 0=uit, 1-3=lamp)
+#define CHAR_HELDERHEID_UUID "a1b2c3d4-e5f6-7890-abcd-ef1234567892"  // helderheid (uint8: 0-100)
+#define CHAR_POWER_UUID      "a1b2c3d4-e5f6-7890-abcd-ef1234567893"  // aan/uit (uint8: 0=uit, 1=aan)
+#define CHAR_COMMANDO_UUID   "a1b2c3d4-e5f6-7890-abcd-ef1234567894"  // tekst commando (string)
+#define CHAR_STATUS_UUID     "a1b2c3d4-e5f6-7890-abcd-ef1234567895"  // status uitlezen (read/notify)
+
+// ── Aanwezigheidsdetectie ───────────────────────────────────────
+#define SCAN_DUUR_MS         5000     // BLE scan duur per burst (5s)
+#define SCAN_INTERVAL_MS     30000    // tijd tussen scans (30s)
+#define PRESENCE_TIMEOUT_MS  300000   // 5 minuten geen signaal = afwezig
+#define OVERRIDE_TIMEOUT_MS  1800000  // 30 min geen auto-on na handmatige uit
+
+// BLE scan parameters (voor WiFi coëxistentie)
+// Scan window moet kleiner zijn dan scan interval
+#define BLE_SCAN_INTERVAL    0x80     // 80ms scan interval
+#define BLE_SCAN_WINDOW      0x10     // 10ms scan window (~87% WiFi tijd)
+
+// ── Zonberekening ───────────────────────────────────────────────
+#define ZON_CHECK_INTERVAL_MS 3600000  // herbereken elke uur (1u)
+#define NTP_SYNC_INTERVAL_MS  3600000  // NTP sync elke uur
+#define NTP_SERVER_1         "pool.ntp.org"
+#define NTP_SERVER_2         "time.nist.gov"
+
 // ── MQTT topics ───────────────────────────────────────────────────
 #define MQTT_TOPIC_BASE  "woonkamer/lampcontroller"
 //
 // Afgeleide topics:
-//   .../status    → lampstatus (JSON, retained)
-//   .../cmd       → commando's ontvangen
-//   .../batterij  → batterijspanning (retained)
-//   .../online    → LWT: "online" of "offline" (retained)
+//   .../status       → lampstatus (JSON, retained)
+//   .../cmd          → commando's ontvangen
+//   .../online       → LWT: "online" of "offline" (retained)
+//   .../aanwezigheid → wie is thuis (JSON, retained)
+//   .../donker       → is het donker buiten (bool, retained)
 
 // ── MQTT QoS niveaus ──────────────────────────────────────────────
-// QoS 0 = fire and forget, QoS 1 = at least once
-#define MQTT_QOS_STATUS  1    // status: belangrijk dat het aankomt
-#define MQTT_QOS_CMD     1    // commando's: at least once
-#define MQTT_QOS_LWT     1    // last will: moet betrouwbaar zijn
+#define MQTT_QOS_STATUS  1
+#define MQTT_QOS_CMD     1
+#define MQTT_QOS_LWT     1
 
 // ── Lamp struct ───────────────────────────────────────────────────
 struct Lamp {
@@ -75,6 +103,12 @@ struct Lamp {
   const char* ip;
   const char* localKey;
   int         versie;
+};
+
+// ── BLE apparaat struct ─────────────────────────────────────────
+struct BleApparaat {
+  const char* naam;          // bijv. "Koen" of "Lotte"
+  const char* macAdres;      // bijv. "AA:BB:CC:DD:EE:FF"
 };
 
 #endif // CONFIG_H

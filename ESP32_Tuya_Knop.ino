@@ -1,41 +1,65 @@
 // ═══════════════════════════════════════════════════════════════════
 //  Woonkamer Lamp Controller -Koen Verhallen
+//  v3.0.0 — M5Stack Atom Lite editie
 //
-//  Mijn ESP32 projectje om de Action lampen in de woonkamer te
-//  bedienen met een enkele drukknop. Geen cloud, geen app, gewoon
-//  een knopje op de muur en klaar.
+//  ESP32 projectje om de Action lampen in de woonkamer te bedienen
+//  met de ingebouwde drukknop, via BLE vanaf je telefoon, en met
+//  automatische aanwezigheidsdetectie.
 //
-//  Wat doet het:
+//  Knop (ingebouwd):
 //    Kort drukken  → wissel tussen lampen
 //    Lang drukken  → dimmen (omlaag / omhoog afwisselend)
 //    Dubbel druk   → alles uit
 //
-//  Features:
-//    - WiFi Manager (configuratie via telefoon)
-//    - OTA firmware updates via WiFi
-//    - Deep sleep met wake-up via knop
-//    - Batterij monitoring met LED waarschuwing
-//    - Foutafhandeling bij onbereikbare lampen
-//    - MQTT voor Home Assistant integratie
+//  BLE telefoonbediening:
+//    Verbind met "LampController" via nRF Connect of andere BLE app
+//    Schrijf naar characteristics om lampen te bedienen
 //
-//  Hardware: ESP32 DevKit V1 + drukknop op GPIO4
+//  Aanwezigheidsdetectie:
+//    Scant voor bekende telefoons (Koen, Lotte)
+//    Lampen automatisch aan als het donker is en iemand thuiskomt
+//    Lampen automatisch uit als iedereen weg is
+//
+//  Hardware: M5Stack Atom Lite (ESP32-PICO-D4)
+//    - Knop op G39, RGB LED op G27, IR op G12 (toekomstig)
 //
 //  Instellingen: zie config.h en secrets.h
 // ═══════════════════════════════════════════════════════════════════
+
+#include "config.h"
+#include "secrets.h"
 
 #include <WiFi.h>
 #include <WiFiManager.h>
 #include <ArduinoOTA.h>
 #include <ArduinoJson.h>
 #include <PubSubClient.h>
-#include <Preferences.h>
+#include <FastLED.h>
+#include <time.h>
 #include "EspTuya.h"
-#include "config.h"
-#include "secrets.h"
+
+#if FEATURE_ZONBEREKENING
+  #include <SolarCalculator.h>
+#endif
+
+#if FEATURE_BLE || FEATURE_PRESENCE
+  #include <NimBLEDevice.h>
+#endif
+
+// ── Forward declaraties ───────────────────────────────────────────
+void publiceerStatus();
+void publiceerAanwezigheid();
+void publiceerDonker();
+void verwerkCommando(String bericht);
+void updateLED();
 
 // ── Afgeleide constanten ──────────────────────────────────────────
-const int AANTAL_LAMPEN = sizeof(lampen) / sizeof(lampen[0]);
-const int ledPinnen[] = { LED_1_PIN, LED_2_PIN, LED_3_PIN };
+const int AANTAL_LAMPEN     = sizeof(lampen) / sizeof(lampen[0]);
+const int AANTAL_BLE_APPARATEN = sizeof(bleApparaten) / sizeof(bleApparaten[0]);
+
+// ── RGB LED ─────────────────────────────────────────────────────
+CRGB led[1];
+const CRGB lampKleuren[] = { KLEUR_LAMP_1, KLEUR_LAMP_2, KLEUR_LAMP_3 };
 
 // ── Huidige status ────────────────────────────────────────────────
 int  activeLamp      = -1;     // -1 = alles uit
@@ -50,63 +74,124 @@ bool          wasIngedrukt   = false;
 bool          wachtOpDubbel  = false;
 
 // Timers
-unsigned long laatsteActiviteit = 0;
-unsigned long laatsteBatCheck   = 0;
-float         batterijVolt      = 4.2;
+unsigned long laatsteActiviteit   = 0;
+unsigned long laatsteZonCheck     = 0;
+unsigned long laatsteScan         = 0;
+unsigned long laatsteNtpSync      = 0;
+unsigned long handmatigeOverride  = 0;  // tijdstip van laatste handmatige "uit"
 
-// WiFi & MQTT
+// ── Zonberekening ───────────────────────────────────────────────
+double burgerlijkeDageraad = 0.0;  // uur UTC
+double burgerlijkeSchemer  = 0.0;  // uur UTC
+bool   ntpGesynchroniseerd = false;
+bool   hetIsDonker         = false;
+
+// ── Aanwezigheid ────────────────────────────────────────────────
+struct ApparaatStatus {
+  unsigned long laatstGezien;
+  int           rssi;
+  bool          aanwezig;
+};
+ApparaatStatus apparaatStatus[MAX_BLE_APPARATEN] = {};
+bool iemandWasThuis = false;  // vorige status voor edge-detectie
+bool scanActief     = false;
+
+// ── WiFi & MQTT ─────────────────────────────────────────────────
 WiFiManager   wifiManager;
 WiFiClient    espClient;
 PubSubClient  mqtt(espClient);
-Preferences   prefs;
 
-// ── Status LEDs ─────────────────────────────────────────────────
+// ── BLE ─────────────────────────────────────────────────────────
+#if FEATURE_BLE
+  NimBLEServer* bleServer = nullptr;
+  bool bleVerbonden = false;
+#endif
 
-void updateLEDs() {
-  for (int i = 0; i < AANTAL_LAMPEN && i < 3; i++) {
-    digitalWrite(ledPinnen[i], lampAan[i] ? HIGH : LOW);
-  }
+#if FEATURE_PRESENCE
+  NimBLEScan* bleScan = nullptr;
+#endif
+
+// ═══════════════════════════════════════════════════════════════════
+//  RGB LED functies
+// ═══════════════════════════════════════════════════════════════════
+
+void toonKleur(CRGB kleur) {
+  led[0] = kleur;
+  FastLED.show();
 }
 
-void knipperLED(int pin, int keer, int ms) {
+void toonUit() {
+  led[0] = CRGB::Black;
+  FastLED.show();
+}
+
+void knipperLED(CRGB kleur, int keer, int ms) {
   for (int i = 0; i < keer; i++) {
-    digitalWrite(pin, HIGH);
+    toonKleur(kleur);
     delay(ms);
-    digitalWrite(pin, LOW);
+    toonUit();
     if (i < keer - 1) delay(ms);
   }
 }
 
-void knipperAlleLEDs(int keer, int ms) {
-  for (int i = 0; i < keer; i++) {
-    for (int j = 0; j < 3; j++) digitalWrite(ledPinnen[j], HIGH);
-    delay(ms);
-    for (int j = 0; j < 3; j++) digitalWrite(ledPinnen[j], LOW);
-    if (i < keer - 1) delay(ms);
+void updateLED() {
+  if (activeLamp >= 0 && activeLamp < AANTAL_LAMPEN) {
+    // Toon kleur van actieve lamp, helderheid geeft dimniveau aan
+    CRGB kleur = lampKleuren[activeLamp];
+    kleur.nscale8(map(helderheid, 0, 100, 20, 255));
+    toonKleur(kleur);
+  } else {
+    toonUit();
   }
 }
 
-// ── Lamp aansturen via Tuya ─────────────────────────────────────
+// Ademend effect (non-blocking, aanroepen vanuit loop)
+uint8_t ademFase = 0;
+void ademLED(CRGB kleur) {
+  uint8_t val = sin8(ademFase);
+  ademFase += 2;
+  CRGB c = kleur;
+  c.nscale8(val);
+  toonKleur(c);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Lamp aansturen via Tuya
+// ═══════════════════════════════════════════════════════════════════
+
+// Pauzeer BLE scan tijdens Tuya commando (WiFi prioriteit)
+void pauzeerScan() {
+  #if FEATURE_PRESENCE
+    if (bleScan && bleScan->isScanning()) {
+      bleScan->stop();
+      scanActief = false;
+    }
+  #endif
+}
 
 bool stuurAanUit(int idx, bool aan) {
   if (idx < 0 || idx >= AANTAL_LAMPEN) return false;
   Serial.printf("[%s] → %s\n", lampen[idx].naam, aan ? "AAN" : "UIT");
 
+  pauzeerScan();
+
   EspTuya tuya;
   if (!tuya.begin(lampen[idx].ip, lampen[idx].localKey, lampen[idx].versie)) {
     Serial.printf("[%s] Fout: kan niet verbinden!\n", lampen[idx].naam);
-    knipperLED(ledPinnen[idx < 3 ? idx : 0], 5, 80);
+    knipperLED(KLEUR_FOUT, 5, 80);
+    updateLED();
     return false;
   }
 
   if (!tuya.setBool(DP_POWER, aan)) {
     Serial.printf("[%s] Fout: commando mislukt!\n", lampen[idx].naam);
-    knipperLED(ledPinnen[idx < 3 ? idx : 0], 5, 80);
+    knipperLED(KLEUR_FOUT, 5, 80);
+    updateLED();
     return false;
   }
 
   lampAan[idx] = aan;
-  updateLEDs();
+  updateLED();
   publiceerStatus();
   return true;
 }
@@ -116,10 +201,13 @@ bool stuurHelderheid(int idx, int pct) {
   int tuyaWaarde = map(pct, 0, 100, 10, 1000);
   Serial.printf("[%s] dim → %d%% (tuya: %d)\n", lampen[idx].naam, pct, tuyaWaarde);
 
+  pauzeerScan();
+
   EspTuya tuya;
   if (!tuya.begin(lampen[idx].ip, lampen[idx].localKey, lampen[idx].versie)) {
     Serial.printf("[%s] Fout: kan niet verbinden!\n", lampen[idx].naam);
-    knipperLED(ledPinnen[idx < 3 ? idx : 0], 5, 80);
+    knipperLED(KLEUR_FOUT, 5, 80);
+    updateLED();
     return false;
   }
 
@@ -131,11 +219,12 @@ bool stuurHelderheid(int idx, int pct) {
 
   if (!tuya.setInt(DP_DIM, tuyaWaarde)) {
     Serial.printf("[%s] Fout: dim commando mislukt!\n", lampen[idx].naam);
-    knipperLED(ledPinnen[idx < 3 ? idx : 0], 5, 80);
+    knipperLED(KLEUR_FOUT, 5, 80);
+    updateLED();
     return false;
   }
 
-  updateLEDs();
+  updateLED();
   publiceerStatus();
   return true;
 }
@@ -147,13 +236,14 @@ void allesUit() {
   activeLamp = -1;
   helderheid = 100;
   dimRichting = false;
-  updateLEDs();
+  updateLED();
   Serial.println("Alles uit.");
 }
 
-// ── Wat de knop doet ────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+//  Wat de knop doet
+// ═══════════════════════════════════════════════════════════════════
 
-// Kort drukken: wissel naar de volgende lamp (of alles uit)
 void actieKort() {
   int vorigeActief = activeLamp;
 
@@ -173,7 +263,6 @@ void actieKort() {
   }
 }
 
-// Lang drukken: dim de actieve lamp (afwisselend omlaag/omhoog)
 void actieLang() {
   if (activeLamp < 0) {
     Serial.println("Niks aan, kan niet dimmen.");
@@ -181,11 +270,9 @@ void actieLang() {
   }
 
   if (dimRichting) {
-    // Omhoog
     helderheid = min(100, helderheid + 20);
     if (helderheid >= 100) dimRichting = false;
   } else {
-    // Omlaag
     helderheid = max(10, helderheid - 20);
     if (helderheid <= 10) dimRichting = true;
   }
@@ -193,56 +280,399 @@ void actieLang() {
   stuurHelderheid(activeLamp, helderheid);
 }
 
-// Dubbel drukken: alles uit
 void actieDubbel() {
+  knipperLED(KLEUR_ALLES_UIT, 1, 100);
   allesUit();
-  Serial.println("Dubbel gedrukt, alles uit.");
+  handmatigeOverride = millis();  // voorkom auto-on na handmatige uit
+  Serial.println("Dubbel gedrukt, alles uit (override actief).");
 }
 
-// ── Batterij monitoring ─────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+//  Zonberekening (burgerlijke schemering)
+// ═══════════════════════════════════════════════════════════════════
 
-float leesBatterij() {
-  if (!FEATURE_BATTERIJ) return 4.2;
+void berekenZonTijden() {
+  #if FEATURE_ZONBEREKENING
+    if (!ntpGesynchroniseerd) return;
 
-  int raw = analogRead(BATTERIJ_PIN);
-  float volt = (raw / 4095.0) * BAT_ADC_REF * BAT_ADC_FACTOR;
-  return volt;
+    struct tm ti;
+    if (!getLocalTime(&ti)) return;
+
+    // SolarCalculator werkt met UTC — gebruik gmtime
+    time_t nu = time(nullptr);
+    struct tm utc;
+    gmtime_r(&nu, &utc);
+
+    calcCivilDawnDusk(utc.tm_year + 1900, utc.tm_mon + 1, utc.tm_mday,
+                      LOCATIE_LAT, LOCATIE_LON,
+                      burgerlijkeDageraad, burgerlijkeSchemer);
+
+    Serial.printf("Zon: dageraad %.2f UTC, schemer %.2f UTC\n",
+                  burgerlijkeDageraad, burgerlijkeSchemer);
+  #endif
 }
 
-void checkBatterij() {
-  if (!FEATURE_BATTERIJ) return;
+bool isDonker() {
+  #if FEATURE_ZONBEREKENING
+    if (!ntpGesynchroniseerd) return false;  // D-006: veilige default
 
-  batterijVolt = leesBatterij();
-  Serial.printf("Batterij: %.2fV\n", batterijVolt);
+    time_t nu = time(nullptr);
+    struct tm utc;
+    gmtime_r(&nu, &utc);
 
-  if (batterijVolt < BAT_KRITIEK_VOLT) {
-    Serial.println("Batterij kritiek! Ga slapen...");
-    knipperAlleLEDs(10, 50);
-    gaSlapen();
-  } else if (batterijVolt < BAT_LAAG_VOLT) {
-    Serial.println("Batterij laag!");
-    knipperAlleLEDs(3, 150);
-    updateLEDs();
+    double uurUTC = utc.tm_hour + utc.tm_min / 60.0 + utc.tm_sec / 3600.0;
+    hetIsDonker = (uurUTC < burgerlijkeDageraad) || (uurUTC > burgerlijkeSchemer);
+    return hetIsDonker;
+  #else
+    return false;
+  #endif
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  NTP tijdsynchronisatie
+// ═══════════════════════════════════════════════════════════════════
+
+void syncNTP() {
+  Serial.println("NTP synchroniseren...");
+  configTime(0, 0, NTP_SERVER_1, NTP_SERVER_2);
+  setenv("TZ", TIJDZONE, 1);
+  tzset();
+
+  // Wacht max 5 seconden op sync
+  struct tm ti;
+  int poging = 0;
+  while (!getLocalTime(&ti) && poging < 10) {
+    delay(500);
+    poging++;
   }
 
-  publiceerBatterij();
+  if (poging < 10) {
+    ntpGesynchroniseerd = true;
+    Serial.printf("NTP OK! Lokale tijd: %02d:%02d:%02d\n", ti.tm_hour, ti.tm_min, ti.tm_sec);
+    berekenZonTijden();
+  } else {
+    Serial.println("NTP sync mislukt, probeer later opnieuw.");
+  }
 }
 
-// ── Deep sleep ──────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+//  BLE GATT Server (telefoonbediening)
+// ═══════════════════════════════════════════════════════════════════
 
-void gaSlapen() {
-  if (!FEATURE_DEEP_SLEEP) return;
+#if FEATURE_BLE
 
-  Serial.println("Ga slapen... druk op de knop om wakker te worden.");
-  Serial.flush();
+class ServerCallbacks : public NimBLEServerCallbacks {
+  void onConnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo) override {
+    bleVerbonden = true;
+    Serial.println("BLE: telefoon verbonden");
+    toonKleur(KLEUR_BLE);
+    delay(200);
+    updateLED();
+  }
 
-  for (int i = 0; i < 3; i++) digitalWrite(ledPinnen[i], LOW);
+  void onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo, int reason) override {
+    bleVerbonden = false;
+    Serial.println("BLE: telefoon losgekoppeld");
+    NimBLEDevice::startAdvertising();
+  }
+};
 
-  esp_sleep_enable_ext0_wakeup((gpio_num_t)KNOP_PIN, LOW);
-  esp_deep_sleep_start();
+// Lamp selectie: schrijf 0 (uit) of 1-3 (lamp nummer)
+class LampCallback : public NimBLECharacteristicCallbacks {
+  void onWrite(NimBLECharacteristic* pChar, NimBLEConnInfo& connInfo) override {
+    uint8_t waarde = pChar->getValue<uint8_t>();
+    Serial.printf("BLE: lamp → %d\n", waarde);
+    laatsteActiviteit = millis();
+
+    if (waarde == 0) {
+      allesUit();
+    } else if (waarde >= 1 && waarde <= AANTAL_LAMPEN) {
+      int nieuweLamp = waarde - 1;
+      if (activeLamp >= 0 && activeLamp != nieuweLamp) {
+        stuurAanUit(activeLamp, false);
+      }
+      activeLamp = nieuweLamp;
+      helderheid = 100;
+      stuurHelderheid(activeLamp, helderheid);
+    }
+  }
+};
+
+// Helderheid: schrijf 0-100
+class HelderheidCallback : public NimBLECharacteristicCallbacks {
+  void onWrite(NimBLECharacteristic* pChar, NimBLEConnInfo& connInfo) override {
+    uint8_t waarde = pChar->getValue<uint8_t>();
+    Serial.printf("BLE: helderheid → %d%%\n", waarde);
+    laatsteActiviteit = millis();
+
+    if (activeLamp >= 0) {
+      helderheid = constrain(waarde, 0, 100);
+      stuurHelderheid(activeLamp, helderheid);
+    }
+  }
+};
+
+// Aan/uit: schrijf 0 of 1
+class PowerCallback : public NimBLECharacteristicCallbacks {
+  void onWrite(NimBLECharacteristic* pChar, NimBLEConnInfo& connInfo) override {
+    uint8_t waarde = pChar->getValue<uint8_t>();
+    Serial.printf("BLE: power → %d\n", waarde);
+    laatsteActiviteit = millis();
+
+    if (waarde == 0) {
+      allesUit();
+      handmatigeOverride = millis();
+    } else {
+      if (activeLamp < 0) activeLamp = 0;
+      stuurAanUit(activeLamp, true);
+    }
+  }
+};
+
+// Tekst commando: "lamp1_on", "lamp2_dim_50", "alles_uit", etc.
+class CommandoCallback : public NimBLECharacteristicCallbacks {
+  void onWrite(NimBLECharacteristic* pChar, NimBLEConnInfo& connInfo) override {
+    std::string raw = pChar->getValue();
+    String bericht = String(raw.c_str());
+    Serial.printf("BLE: commando → %s\n", bericht.c_str());
+    laatsteActiviteit = millis();
+    verwerkCommando(bericht);
+  }
+};
+
+NimBLECharacteristic* statusChar = nullptr;
+
+void setupBLE() {
+  Serial.println("BLE GATT server starten...");
+
+  NimBLEDevice::init(BLE_DEVICE_NAAM);
+  NimBLEDevice::setPower(ESP_PWR_LVL_P6);
+
+  bleServer = NimBLEDevice::createServer();
+  bleServer->setCallbacks(new ServerCallbacks());
+
+  NimBLEService* service = bleServer->createService(SERVICE_UUID);
+
+  // Lamp selectie (write)
+  NimBLECharacteristic* lampChar = service->createCharacteristic(
+    CHAR_LAMP_UUID, NIMBLE_PROPERTY::WRITE);
+  lampChar->setCallbacks(new LampCallback());
+
+  // Helderheid (write)
+  NimBLECharacteristic* heldChar = service->createCharacteristic(
+    CHAR_HELDERHEID_UUID, NIMBLE_PROPERTY::WRITE);
+  heldChar->setCallbacks(new HelderheidCallback());
+
+  // Power (write)
+  NimBLECharacteristic* powerChar = service->createCharacteristic(
+    CHAR_POWER_UUID, NIMBLE_PROPERTY::WRITE);
+  powerChar->setCallbacks(new PowerCallback());
+
+  // Commando (write)
+  NimBLECharacteristic* cmdChar = service->createCharacteristic(
+    CHAR_COMMANDO_UUID, NIMBLE_PROPERTY::WRITE);
+  cmdChar->setCallbacks(new CommandoCallback());
+
+  // Status (read + notify)
+  statusChar = service->createCharacteristic(
+    CHAR_STATUS_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
+
+  service->start();
+
+  NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
+  adv->addServiceUUID(SERVICE_UUID);
+  adv->setScanResponse(true);
+  adv->start();
+
+  Serial.printf("BLE klaar: \"%s\"\n", BLE_DEVICE_NAAM);
 }
 
-// ── MQTT (Home Assistant) ───────────────────────────────────────
+void updateBLEStatus() {
+  if (!statusChar || !bleVerbonden) return;
+
+  StaticJsonDocument<128> doc;
+  doc["lamp"] = activeLamp + 1;  // 0=uit, 1-3=lamp
+  doc["helderheid"] = helderheid;
+  doc["aan"] = (activeLamp >= 0);
+  doc["donker"] = hetIsDonker;
+
+  char buf[128];
+  serializeJson(doc, buf, sizeof(buf));
+  statusChar->setValue(buf);
+  statusChar->notify();
+}
+
+#endif // FEATURE_BLE
+
+// ═══════════════════════════════════════════════════════════════════
+//  BLE Aanwezigheidsdetectie
+// ═══════════════════════════════════════════════════════════════════
+
+#if FEATURE_PRESENCE
+
+// Vergelijk MAC-adressen (case-insensitive)
+bool macGelijk(const char* a, const char* b) {
+  while (*a && *b) {
+    if (tolower(*a) != tolower(*b)) return false;
+    a++; b++;
+  }
+  return *a == *b;
+}
+
+class ScanCallbacks : public NimBLEScanCallbacks {
+  void onResult(const NimBLEAdvertisedDevice* apparaat) override {
+    std::string macStr = apparaat->getAddress().toString();
+
+    for (int i = 0; i < AANTAL_BLE_APPARATEN; i++) {
+      if (macGelijk(macStr.c_str(), bleApparaten[i].macAdres)) {
+        apparaatStatus[i].laatstGezien = millis();
+        apparaatStatus[i].rssi = apparaat->getRSSI();
+        if (!apparaatStatus[i].aanwezig) {
+          apparaatStatus[i].aanwezig = true;
+          Serial.printf("Aanwezigheid: %s is thuisgekomen (RSSI: %d)\n",
+                        bleApparaten[i].naam, apparaat->getRSSI());
+          publiceerAanwezigheid();
+        }
+      }
+    }
+  }
+
+  void onScanEnd(const NimBLEScanResults& results, int reason) override {
+    scanActief = false;
+  }
+};
+
+void setupPresence() {
+  Serial.println("Aanwezigheidsdetectie starten...");
+
+  bleScan = NimBLEDevice::getScan();
+  bleScan->setScanCallbacks(new ScanCallbacks(), false);
+  bleScan->setInterval(BLE_SCAN_INTERVAL);
+  bleScan->setWindow(BLE_SCAN_WINDOW);
+  bleScan->setActiveScan(true);
+
+  for (int i = 0; i < AANTAL_BLE_APPARATEN; i++) {
+    apparaatStatus[i].laatstGezien = 0;
+    apparaatStatus[i].rssi = 0;
+    apparaatStatus[i].aanwezig = false;
+  }
+
+  Serial.printf("Tracking: %d apparaten\n", AANTAL_BLE_APPARATEN);
+  for (int i = 0; i < AANTAL_BLE_APPARATEN; i++) {
+    Serial.printf("  - %s (%s)\n", bleApparaten[i].naam, bleApparaten[i].macAdres);
+  }
+}
+
+void startScan() {
+  if (scanActief) return;
+  if (WiFi.status() != WL_CONNECTED) return;  // WiFi prioriteit
+
+  scanActief = true;
+  bleScan->start(SCAN_DUUR_MS / 1000, false);  // niet-blokkerend
+}
+
+bool iemandThuis() {
+  unsigned long nu = millis();
+  for (int i = 0; i < AANTAL_BLE_APPARATEN; i++) {
+    if (apparaatStatus[i].aanwezig) {
+      // Check timeout
+      if (apparaatStatus[i].laatstGezien > 0 &&
+          (nu - apparaatStatus[i].laatstGezien) > PRESENCE_TIMEOUT_MS) {
+        apparaatStatus[i].aanwezig = false;
+        Serial.printf("Aanwezigheid: %s is vertrokken (timeout)\n", bleApparaten[i].naam);
+        publiceerAanwezigheid();
+      }
+    }
+    if (apparaatStatus[i].aanwezig) return true;
+  }
+  return false;
+}
+
+void checkAanwezigheid() {
+  unsigned long nu = millis();
+  bool nuIemandThuis = iemandThuis();
+  bool nuDonker = isDonker();
+
+  // Edge: iemand komt thuis + het is donker → lampen aan
+  if (nuIemandThuis && !iemandWasThuis && nuDonker) {
+    // Check handmatige override
+    if (handmatigeOverride == 0 || (nu - handmatigeOverride) > OVERRIDE_TIMEOUT_MS) {
+      Serial.println("Auto-aan: iemand thuisgekomen en het is donker!");
+      if (activeLamp < 0) {
+        activeLamp = 0;
+        helderheid = 100;
+        stuurHelderheid(activeLamp, helderheid);
+      }
+    } else {
+      Serial.println("Auto-aan overgeslagen (handmatige override actief).");
+    }
+  }
+
+  // Edge: het wordt donker terwijl iemand thuis is → lampen aan
+  if (nuIemandThuis && nuDonker && activeLamp < 0) {
+    if (handmatigeOverride == 0 || (nu - handmatigeOverride) > OVERRIDE_TIMEOUT_MS) {
+      Serial.println("Auto-aan: het wordt donker en iemand is thuis!");
+      activeLamp = 0;
+      helderheid = 100;
+      stuurHelderheid(activeLamp, helderheid);
+    }
+  }
+
+  // Edge: iedereen weg → lampen uit (ongeacht licht/donker)
+  if (!nuIemandThuis && iemandWasThuis) {
+    Serial.println("Auto-uit: iedereen is vertrokken.");
+    allesUit();
+    handmatigeOverride = 0;  // reset override bij vertrek
+  }
+
+  iemandWasThuis = nuIemandThuis;
+}
+
+#endif // FEATURE_PRESENCE
+
+// ═══════════════════════════════════════════════════════════════════
+//  Gedeelde commando-parser (MQTT + BLE)
+// ═══════════════════════════════════════════════════════════════════
+
+void verwerkCommando(String bericht) {
+  laatsteActiviteit = millis();
+
+  if (bericht == "alles_uit") {
+    allesUit();
+    handmatigeOverride = millis();
+  }
+  else if (bericht.startsWith("lamp") && bericht.length() >= 6) {
+    int idx = bericht.charAt(4) - '1';
+    if (idx >= 0 && idx < AANTAL_LAMPEN) {
+      if (bericht.indexOf("_on") > 0) {
+        activeLamp = idx;
+        stuurAanUit(idx, true);
+      } else if (bericht.indexOf("_off") > 0) {
+        stuurAanUit(idx, false);
+        if (activeLamp == idx) activeLamp = -1;
+      } else if (bericht.indexOf("_dim_") > 0) {
+        int pct = bericht.substring(bericht.lastIndexOf('_') + 1).toInt();
+        if (pct >= 0 && pct <= 100) {
+          activeLamp = idx;
+          helderheid = pct;
+          stuurHelderheid(idx, pct);
+        }
+      }
+    }
+  }
+  #if FEATURE_PRESENCE
+  else if (bericht == "presence_on") {
+    Serial.println("Aanwezigheidsdetectie ingeschakeld via commando.");
+  }
+  else if (bericht == "presence_off") {
+    Serial.println("Aanwezigheidsdetectie uitgeschakeld via commando.");
+  }
+  #endif
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  MQTT (Home Assistant)
+// ═══════════════════════════════════════════════════════════════════
 
 void mqttVerbind() {
   if (!FEATURE_MQTT) return;
@@ -266,7 +696,8 @@ void mqttVerbind() {
     mqtt.publish(MQTT_TOPIC_BASE "/online", "online", true);
     mqtt.subscribe(MQTT_TOPIC_BASE "/cmd", MQTT_QOS_CMD);
     publiceerStatus();
-    publiceerBatterij();
+    publiceerAanwezigheid();
+    publiceerDonker();
   } else {
     Serial.printf("MQTT mislukt, rc=%d\n", mqtt.state());
   }
@@ -277,24 +708,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   for (unsigned int i = 0; i < length; i++) bericht += (char)payload[i];
 
   Serial.printf("MQTT ontvangen [%s]: %s\n", topic, bericht.c_str());
-
-  // Simpele commando's: "lamp1_on", "lamp1_off", "lamp2_dim_50", "alles_uit"
-  if (bericht == "alles_uit") {
-    allesUit();
-  }
-  else if (bericht.startsWith("lamp") && bericht.length() >= 6) {
-    int idx = bericht.charAt(4) - '1';
-    if (idx >= 0 && idx < AANTAL_LAMPEN) {
-      if (bericht.indexOf("_on") > 0) {
-        stuurAanUit(idx, true);
-      } else if (bericht.indexOf("_off") > 0) {
-        stuurAanUit(idx, false);
-      } else if (bericht.indexOf("_dim_") > 0) {
-        int pct = bericht.substring(bericht.lastIndexOf('_') + 1).toInt();
-        if (pct >= 0 && pct <= 100) stuurHelderheid(idx, pct);
-      }
-    }
-  }
+  verwerkCommando(bericht);
 }
 
 void publiceerStatus() {
@@ -314,27 +728,54 @@ void publiceerStatus() {
   char buf[256];
   serializeJson(doc, buf, sizeof(buf));
   mqtt.publish(MQTT_TOPIC_BASE "/status", buf, true);
+
+  #if FEATURE_BLE
+    updateBLEStatus();
+  #endif
 }
 
-void publiceerBatterij() {
-  if (!FEATURE_MQTT || !mqtt.connected() || !FEATURE_BATTERIJ) return;
+void publiceerAanwezigheid() {
+  #if FEATURE_PRESENCE
+    if (!FEATURE_MQTT || !mqtt.connected()) return;
 
-  char buf[32];
-  snprintf(buf, sizeof(buf), "%.2f", batterijVolt);
-  mqtt.publish(MQTT_TOPIC_BASE "/batterij", buf, true);
+    StaticJsonDocument<256> doc;
+    doc["iemand_thuis"] = iemandThuis();
+
+    JsonArray arr = doc.createNestedArray("apparaten");
+    for (int i = 0; i < AANTAL_BLE_APPARATEN; i++) {
+      JsonObject a = arr.createNestedObject();
+      a["naam"] = bleApparaten[i].naam;
+      a["aanwezig"] = apparaatStatus[i].aanwezig;
+      a["rssi"] = apparaatStatus[i].rssi;
+    }
+
+    char buf[256];
+    serializeJson(doc, buf, sizeof(buf));
+    mqtt.publish(MQTT_TOPIC_BASE "/aanwezigheid", buf, true);
+  #endif
 }
 
-// ── WiFi verbinding (via WiFi Manager) ──────────────────────────
+void publiceerDonker() {
+  #if FEATURE_ZONBEREKENING
+    if (!FEATURE_MQTT || !mqtt.connected()) return;
+    mqtt.publish(MQTT_TOPIC_BASE "/donker", hetIsDonker ? "true" : "false", true);
+  #endif
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  WiFi verbinding (via WiFi Manager)
+// ═══════════════════════════════════════════════════════════════════
 
 void verbindWiFi() {
   wifiManager.setConfigPortalTimeout(120);
   wifiManager.setAPCallback([](WiFiManager* mgr) {
     Serial.println("WiFi niet geconfigureerd.");
     Serial.println("Verbind met 'LampController-Setup' op je telefoon.");
-    knipperAlleLEDs(2, 300);
+    knipperLED(KLEUR_WIFI, 2, 300);
   });
 
-  // Probeert opgeslagen WiFi, anders opent configuratie portaal
+  toonKleur(KLEUR_WIFI);
+
   if (!wifiManager.autoConnect("LampController-Setup")) {
     Serial.println("WiFi configuratie mislukt, herstart...");
     delay(3000);
@@ -342,17 +783,23 @@ void verbindWiFi() {
   }
 
   Serial.printf("Verbonden! IP: %s\n", WiFi.localIP().toString().c_str());
+  toonUit();
 }
 
-// ── OTA updates ─────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+//  OTA updates
+// ═══════════════════════════════════════════════════════════════════
 
 void setupOTA() {
   if (!FEATURE_OTA) return;
 
-  ArduinoOTA.setHostname("lamp-controller");
+  ArduinoOTA.setHostname(DEVICE_ID);
   ArduinoOTA.onStart([]() {
     Serial.println("OTA update gestart...");
-    knipperAlleLEDs(3, 100);
+    #if FEATURE_PRESENCE
+      if (bleScan && bleScan->isScanning()) bleScan->stop();
+    #endif
+    knipperLED(KLEUR_WIFI, 3, 100);
   });
   ArduinoOTA.onEnd([]() {
     Serial.println("OTA update klaar! Herstart...");
@@ -367,37 +814,37 @@ void setupOTA() {
   Serial.println("OTA klaar (upload via Arduino IDE of PlatformIO)");
 }
 
-// ── Setup ───────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+//  Setup
+// ═══════════════════════════════════════════════════════════════════
 
 void setup() {
   Serial.begin(115200);
   delay(500);
   Serial.printf("\n=== %s v%s -Koen Verhallen ===\n", FIRMWARE_NAAM, FIRMWARE_VERSIE);
+  Serial.println("Hardware: M5Stack Atom Lite");
 
-  // Check of we wakker worden uit deep sleep
-  if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0) {
-    Serial.println("Wakker geworden door knop!");
-  }
+  // RGB LED initialiseren
+  FastLED.addLeds<SK6812, RGB_LED_PIN, GRB>(led, 1);
+  FastLED.setBrightness(RGB_HELDERHEID);
+  toonUit();
 
-  // Pinnen instellen
-  pinMode(KNOP_PIN, INPUT_PULLUP);
-  for (int i = 0; i < 3; i++) {
-    pinMode(ledPinnen[i], OUTPUT);
-    digitalWrite(ledPinnen[i], LOW);
-  }
+  // Knop instellen (G39 = input only, Atom Lite heeft externe pull-up)
+  pinMode(KNOP_PIN, INPUT);
 
-  // Opstart animatie
-  for (int i = 0; i < 3; i++) {
-    digitalWrite(ledPinnen[i], HIGH);
-    delay(150);
+  // Opstart animatie: regenboog sweep
+  for (int hue = 0; hue < 256; hue += 8) {
+    led[0] = CHSV(hue, 255, 200);
+    FastLED.show();
+    delay(15);
   }
-  for (int i = 0; i < 3; i++) {
-    digitalWrite(ledPinnen[i], LOW);
-    delay(150);
-  }
+  toonUit();
 
-  // WiFi (via WiFi Manager portaal)
+  // WiFi (via WiFi Manager portaal) — VOOR BLE! (D-005)
   verbindWiFi();
+
+  // NTP tijdsynchronisatie
+  syncNTP();
 
   // OTA updates
   setupOTA();
@@ -409,26 +856,44 @@ void setup() {
     mqttVerbind();
   }
 
-  // Batterij eerste meting
-  if (FEATURE_BATTERIJ) {
-    analogReadResolution(12);
-    checkBatterij();
-  }
+  // BLE starten (NA WiFi verbinding — D-005)
+  #if FEATURE_BLE
+    setupBLE();
+  #endif
+
+  #if FEATURE_PRESENCE
+    setupPresence();
+  #endif
 
   laatsteActiviteit = millis();
+
+  // Geheugen check
+  Serial.printf("Vrij geheugen: %d bytes\n", ESP.getFreeHeap());
 
   Serial.println("Klaar!");
   Serial.println("  Kort drukken   = volgende lamp");
   Serial.println("  Lang drukken   = dimmen (omlaag/omhoog)");
   Serial.println("  Dubbel drukken = alles uit");
-  if (FEATURE_OTA)        Serial.println("  OTA updates    = aan");
-  if (FEATURE_DEEP_SLEEP) Serial.printf( "  Deep sleep     = na %ds inactiviteit\n", SLAAP_TIMEOUT_MS / 1000);
-  if (FEATURE_MQTT)       Serial.printf( "  MQTT           = %s\n", MQTT_SERVER);
+  if (FEATURE_OTA)     Serial.println("  OTA updates    = aan");
+  if (FEATURE_MQTT)    Serial.printf( "  MQTT           = %s\n", MQTT_SERVER);
+  if (FEATURE_BLE)     Serial.printf( "  BLE            = %s\n", BLE_DEVICE_NAAM);
+  if (FEATURE_PRESENCE) Serial.printf("  Aanwezigheid   = %d apparaten\n", AANTAL_BLE_APPARATEN);
+  if (FEATURE_ZONBEREKENING) {
+    Serial.printf("  Zon            = lat %.2f, lon %.2f\n", LOCATIE_LAT, LOCATIE_LON);
+    Serial.printf("  Donker         = %s\n", hetIsDonker ? "ja" : "nee");
+  }
+
+  // Groene flash = klaar
+  knipperLED(CRGB(0, 255, 0), 2, 150);
+  updateLED();
 }
 
-// ── Loop ────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+//  Loop
+// ═══════════════════════════════════════════════════════════════════
 
 void loop() {
+  unsigned long nu = millis();
 
   // OTA afhandelen
   if (FEATURE_OTA) ArduinoOTA.handle();
@@ -442,24 +907,48 @@ void loop() {
   // WiFi check
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("WiFi weg, herverbinden...");
-    verbindWiFi();
-  }
-
-  // Batterij check (elke 30s)
-  if (FEATURE_BATTERIJ && (millis() - laatsteBatCheck >= BAT_CHECK_MS)) {
-    checkBatterij();
-    laatsteBatCheck = millis();
-  }
-
-  // Deep sleep check (na timeout zonder activiteit)
-  if (FEATURE_DEEP_SLEEP && activeLamp == -1) {
-    if (millis() - laatsteActiviteit >= SLAAP_TIMEOUT_MS) {
-      gaSlapen();
+    toonKleur(KLEUR_WIFI);
+    WiFi.reconnect();
+    delay(5000);
+    if (WiFi.status() != WL_CONNECTED) {
+      verbindWiFi();
     }
+    toonUit();
+    updateLED();
   }
 
+  // NTP hersynch (elke uur)
+  if (nu - laatsteNtpSync >= NTP_SYNC_INTERVAL_MS) {
+    syncNTP();
+    laatsteNtpSync = nu;
+  }
+
+  // Zonberekening herberekenen (elke uur)
+  #if FEATURE_ZONBEREKENING
+    if (nu - laatsteZonCheck >= ZON_CHECK_INTERVAL_MS) {
+      bool wasDonker = hetIsDonker;
+      berekenZonTijden();
+      isDonker();
+      laatsteZonCheck = nu;
+
+      if (hetIsDonker != wasDonker) {
+        Serial.printf("Donker status gewijzigd: %s\n", hetIsDonker ? "donker" : "licht");
+        publiceerDonker();
+      }
+    }
+  #endif
+
+  // BLE aanwezigheid scan (burst elke 30s)
+  #if FEATURE_PRESENCE
+    if (nu - laatsteScan >= SCAN_INTERVAL_MS) {
+      startScan();
+      laatsteScan = nu;
+    }
+    checkAanwezigheid();
+  #endif
+
+  // ── Knop afhandeling ──────────────────────────────────────────
   bool ingedrukt = (digitalRead(KNOP_PIN) == LOW);
-  unsigned long nu = millis();
 
   // Knop ingedrukt
   if (ingedrukt && !wasIngedrukt) {
@@ -478,7 +967,6 @@ void loop() {
     if (duur >= LANG_DRUK_MS) {
       actieLang();
       wachtOpDubbel = false;
-
     } else {
       if (wachtOpDubbel && (nu - knopLosTijd) < DUBBEL_WINDOW) {
         actieDubbel();
@@ -490,7 +978,7 @@ void loop() {
     }
   }
 
-  // Geen tweede druk gekomen, dan was het een korte druk
+  // Geen tweede druk gekomen → korte druk
   if (wachtOpDubbel && (nu - knopLosTijd) >= DUBBEL_WINDOW) {
     actieKort();
     wachtOpDubbel = false;
@@ -501,14 +989,13 @@ void loop() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  Bedrading
-//  ─────────
-//  GPIO4  ── knop ── 10kΩ ── 3V3        (drukknop + pull-up)
-//  GND    ── knop (andere pin)
-//  GPIO16 ── 220Ω ── LED 1 ── GND       (status Hoofdlicht)
-//  GPIO17 ── 220Ω ── LED 2 ── GND       (status Sfeerlamp)
-//  GPIO18 ── 220Ω ── LED 3 ── GND       (status Leeslamp)
-//  GPIO35 ── spanningsdeler ── batterij  (100kΩ + 100kΩ)
+//  Hardware: M5Stack Atom Lite (ESP32-PICO-D4)
+//  ──────────────────────────────────────────────
+//  G39  ── ingebouwde drukknop (actief laag, externe pull-up)
+//  G27  ── ingebouwde SK6812 RGB LED (NeoPixel-compatible)
+//  G12  ── ingebouwde IR LED (gereserveerd)
+//  G26  ── Grove SDA (gereserveerd)
+//  G32  ── Grove SCL (gereserveerd)
 //
-//  Voeding: Micro-USB of 18650 via TP4056
+//  Voeding: USB-C (5V)
 // ═══════════════════════════════════════════════════════════════════
