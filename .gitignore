@@ -1,5 +1,5 @@
 # Secrets (wachtwoorden, local keys)
-secrets.h
+/secrets.h
 
 # Installers en binaries
 *.exe
