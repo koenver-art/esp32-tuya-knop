@@ -43,8 +43,8 @@ Lamp lampen[] = {
 // Tip: gebruik nRF Connect om het juiste BLE MAC-adres te vinden.
 
 BleApparaat bleApparaten[] = {
-  { "Koen",  "AA:BB:CC:DD:EE:01" },
-  { "Lotte", "AA:BB:CC:DD:EE:02" },
+  { "Koen (AirPods)",  "12345678-1234-1234-1234-123456789abc", "" },  // Apple: UUID
+  { "Lotte",           "", "AA:BB:CC:DD:EE:02" },                     // Android: MAC
 };
 
 // ── Locatie (voor zonsberekening) ────────────────────────────────

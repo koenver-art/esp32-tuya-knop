@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════
 //  Configuratie -Woonkamer Lamp Controller (M5Stack Atom Lite)
-//  Koen Verhallen, 2026
+//  Frank Geujen, 2026
 //
 //  Alle instellingen op één plek. Pas hier aan wat je nodig hebt.
 //  Gevoelige gegevens (wachtwoorden, keys) staan in secrets.h
@@ -19,7 +19,7 @@
 #define FEATURE_OTA          true
 #define FEATURE_MQTT         true
 #define FEATURE_BLE          true     // BLE telefoonbediening (GATT server)
-#define FEATURE_PRESENCE     true     // BLE aanwezigheidsdetectie
+#define FEATURE_PRESENCE     true     // BLE aanwezigheidsdetectie (via service UUID voor Apple apparaten)
 #define FEATURE_ZONBEREKENING true    // Zonsopkomst/-ondergang berekening
 
 // ── Lampen ────────────────────────────────────────────────────────
@@ -106,9 +106,12 @@ struct Lamp {
 };
 
 // ── BLE apparaat struct ─────────────────────────────────────────
+// Matching op service UUID (voor Apple apparaten die MAC roteren)
+// OF op MAC-adres (voor Android apparaten met vast MAC)
 struct BleApparaat {
-  const char* naam;          // bijv. "Koen" of "Lotte"
-  const char* macAdres;      // bijv. "AA:BB:CC:DD:EE:FF"
+  const char* naam;            // bijv. "Frank"
+  const char* serviceUUID;     // service UUID (voor Apple), of "" als MAC gebruikt wordt
+  const char* macAdres;        // MAC-adres (voor Android), of "" als UUID gebruikt wordt
 };
 
 #endif // CONFIG_H

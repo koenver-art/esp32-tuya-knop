@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════
-//  Woonkamer Lamp Controller -Koen Verhallen
+//  Woonkamer Lamp Controller -Frank Geujen
 //  v3.0.0 — M5Stack Atom Lite editie
 //
 //  ESP32 projectje om de Action lampen in de woonkamer te bedienen
@@ -16,7 +16,7 @@
 //    Schrijf naar characteristics om lampen te bedienen
 //
 //  Aanwezigheidsdetectie:
-//    Scant voor bekende telefoons (Koen, Lotte)
+//    Scant voor bekende apparaten (bijv. AirPods)
 //    Lampen automatisch aan als het donker is en iemand thuiskomt
 //    Lampen automatisch uit als iedereen weg is
 //
@@ -510,8 +510,10 @@ void updateBLEStatus() {
 
 #if FEATURE_PRESENCE
 
-// Vergelijk MAC-adressen (case-insensitive)
-bool macGelijk(const char* a, const char* b) {
+// Vergelijk strings (case-insensitive)
+bool stringGelijk(const char* a, const char* b) {
+  if (!a || !b) return false;
+  if (strlen(a) == 0 || strlen(b) == 0) return false;
   while (*a && *b) {
     if (tolower(*a) != tolower(*b)) return false;
     a++; b++;
@@ -519,12 +521,31 @@ bool macGelijk(const char* a, const char* b) {
   return *a == *b;
 }
 
+// Check of apparaat matcht op service UUID of MAC-adres
+bool apparaatMatcht(const NimBLEAdvertisedDevice* apparaat, int idx) {
+  // Methode 1: Match op service UUID (voor Apple apparaten)
+  if (strlen(bleApparaten[idx].serviceUUID) > 0) {
+    NimBLEUUID zoekUUID(bleApparaten[idx].serviceUUID);
+    if (apparaat->isAdvertisingService(zoekUUID)) {
+      return true;
+    }
+  }
+
+  // Methode 2: Match op MAC-adres (voor Android apparaten)
+  if (strlen(bleApparaten[idx].macAdres) > 0) {
+    std::string macStr = apparaat->getAddress().toString();
+    if (stringGelijk(macStr.c_str(), bleApparaten[idx].macAdres)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 class ScanCallbacks : public NimBLEScanCallbacks {
   void onResult(const NimBLEAdvertisedDevice* apparaat) override {
-    std::string macStr = apparaat->getAddress().toString();
-
     for (int i = 0; i < AANTAL_BLE_APPARATEN; i++) {
-      if (macGelijk(macStr.c_str(), bleApparaten[i].macAdres)) {
+      if (apparaatMatcht(apparaat, i)) {
         apparaatStatus[i].laatstGezien = millis();
         apparaatStatus[i].rssi = apparaat->getRSSI();
         if (!apparaatStatus[i].aanwezig) {
@@ -559,7 +580,11 @@ void setupPresence() {
 
   Serial.printf("Tracking: %d apparaten\n", AANTAL_BLE_APPARATEN);
   for (int i = 0; i < AANTAL_BLE_APPARATEN; i++) {
-    Serial.printf("  - %s (%s)\n", bleApparaten[i].naam, bleApparaten[i].macAdres);
+    if (strlen(bleApparaten[i].serviceUUID) > 0) {
+      Serial.printf("  - %s (UUID: %s)\n", bleApparaten[i].naam, bleApparaten[i].serviceUUID);
+    } else {
+      Serial.printf("  - %s (MAC: %s)\n", bleApparaten[i].naam, bleApparaten[i].macAdres);
+    }
   }
 }
 
@@ -821,7 +846,7 @@ void setupOTA() {
 void setup() {
   Serial.begin(115200);
   delay(500);
-  Serial.printf("\n=== %s v%s -Koen Verhallen ===\n", FIRMWARE_NAAM, FIRMWARE_VERSIE);
+  Serial.printf("\n=== %s v%s -Frank Geujen ===\n", FIRMWARE_NAAM, FIRMWARE_VERSIE);
   Serial.println("Hardware: M5Stack Atom Lite");
 
   // RGB LED initialiseren
