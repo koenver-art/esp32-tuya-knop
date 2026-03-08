@@ -81,6 +81,7 @@ unsigned long laatsteNtpSync      = 0;
 unsigned long handmatigeOverride  = 0;  // tijdstip van laatste handmatige "uit"
 
 // ── Zonberekening ───────────────────────────────────────────────
+double zonTransit          = 0.0;  // uur UTC
 double burgerlijkeDageraad = 0.0;  // uur UTC
 double burgerlijkeSchemer  = 0.0;  // uur UTC
 bool   ntpGesynchroniseerd = false;
@@ -305,7 +306,7 @@ void berekenZonTijden() {
 
     calcCivilDawnDusk(utc.tm_year + 1900, utc.tm_mon + 1, utc.tm_mday,
                       LOCATIE_LAT, LOCATIE_LON,
-                      burgerlijkeDageraad, burgerlijkeSchemer);
+                      zonTransit, burgerlijkeDageraad, burgerlijkeSchemer);
 
     Serial.printf("Zon: dageraad %.2f UTC, schemer %.2f UTC\n",
                   burgerlijkeDageraad, burgerlijkeSchemer);
@@ -481,7 +482,6 @@ void setupBLE() {
 
   NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
   adv->addServiceUUID(SERVICE_UUID);
-  adv->setScanResponse(true);
   adv->start();
 
   Serial.printf("BLE klaar: \"%s\"\n", BLE_DEVICE_NAAM);
