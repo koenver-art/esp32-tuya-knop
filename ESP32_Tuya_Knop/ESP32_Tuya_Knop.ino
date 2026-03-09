@@ -1054,9 +1054,22 @@ String maakStatusJson() {
 }
 
 void setupWeb() {
-  // Hoofdpagina
+  // Hoofdpagina — stuur in chunks voor betrouwbaarheid
   webServer.on("/", HTTP_GET, []() {
-    webServer.send_P(200, "text/html", WEBPAGINA);
+    webServer.setContentLength(strlen_P(WEBPAGINA));
+    webServer.send(200, "text/html", "");
+    // Stuur in blokken van 1024 bytes
+    const char* p = WEBPAGINA;
+    size_t remaining = strlen_P(WEBPAGINA);
+    char buf[1025];
+    while (remaining > 0) {
+      size_t chunk = (remaining > 1024) ? 1024 : remaining;
+      memcpy_P(buf, p, chunk);
+      buf[chunk] = 0;
+      webServer.sendContent(buf);
+      p += chunk;
+      remaining -= chunk;
+    }
   });
 
   // Status API
