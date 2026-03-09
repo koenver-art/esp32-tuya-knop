@@ -127,7 +127,7 @@ bool iemandWasThuis = false;  // vorige status voor edge-detectie
 bool scanActief     = false;
 
 // ── WiFi & MQTT ─────────────────────────────────────────────────
-WiFiManager   wifiManager;
+// WiFiManager wordt lokaal aangemaakt in verbindWiFi()
 WiFiClient    espClient;
 PubSubClient  mqtt(espClient);
 
@@ -1193,8 +1193,9 @@ void setupWeb() {
 // ═══════════════════════════════════════════════════════════════════
 
 void verbindWiFi() {
-  wifiManager.setConfigPortalTimeout(120);
-  wifiManager.setAPCallback([](WiFiManager* mgr) {
+  WiFiManager wm;  // lokaal — wordt vrijgegeven na deze functie
+  wm.setConfigPortalTimeout(120);
+  wm.setAPCallback([](WiFiManager* mgr) {
     Serial.println("WiFi niet geconfigureerd.");
     Serial.println("Verbind met 'LampController-Setup' op je telefoon.");
     knipperLED(KLEUR_WIFI, 2, 300);
@@ -1202,7 +1203,7 @@ void verbindWiFi() {
 
   toonKleur(KLEUR_WIFI);
 
-  if (!wifiManager.autoConnect("LampController-Setup")) {
+  if (!wm.autoConnect("LampController-Setup")) {
     Serial.println("WiFi configuratie mislukt, herstart...");
     delay(3000);
     ESP.restart();
@@ -1210,9 +1211,7 @@ void verbindWiFi() {
 
   Serial.printf("Verbonden! IP: %s\n", WiFi.localIP().toString().c_str());
   toonUit();
-
-  // WiFiManager webserver stoppen zodat onze WebServer poort 80 kan gebruiken
-  wifiManager.stopWebPortal();
+  // wm gaat hier out of scope → poort 80 wordt vrijgegeven
 }
 
 // ═══════════════════════════════════════════════════════════════════
