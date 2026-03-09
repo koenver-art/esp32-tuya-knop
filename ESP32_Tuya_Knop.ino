@@ -73,7 +73,23 @@ bool dimRichting     = false;  // false = omlaag, true = omhoog
 unsigned long knopNeerTijd   = 0;
 unsigned long knopLosTijd    = 0;
 bool          wasIngedrukt   = false;
-bool          wachtOpDubbel  = false;
+int           knopTeller     = 0;    // telt kort-drukken binnen DUBBEL_WINDOW
+
+// Kleurmodus cyclus
+int kleurModus = 0;  // 0=wit, 1=warm, 2=koud, 3=rood, 4=groen, 5=blauw, 6=paars, 7=oranje
+const int AANTAL_KLEURMODI = 8;
+const char* kleurModusNaam[] = { "wit", "warm", "koud", "rood", "groen", "blauw", "paars", "oranje" };
+// HSV waarden per modus: {hue, sat, val} — wit/warm/koud gebruiken kleurtemp
+const int kleurModusHSV[][3] = {
+  {0, 0, 0},       // wit (speciale behandeling)
+  {0, 0, 0},       // warm (speciale behandeling)
+  {0, 0, 0},       // koud (speciale behandeling)
+  {0, 1000, 1000},     // rood
+  {120, 1000, 1000},   // groen
+  {240, 1000, 1000},   // blauw
+  {280, 1000, 1000},   // paars
+  {30, 1000, 1000},    // oranje
+};
 
 // Timers
 unsigned long laatsteActiviteit   = 0;
@@ -335,28 +351,32 @@ void allesUit() {
 //  Wat de knop doet
 // ═══════════════════════════════════════════════════════════════════
 
+// Kort drukken = lamp aan/uit toggle
 void actieKort() {
-  int vorigeActief = activeLamp;
-
-  activeLamp++;
-  if (activeLamp >= AANTAL_LAMPEN) activeLamp = -1;
-
-  if (activeLamp == -1) {
-    allesUit();
-  } else {
-    if (vorigeActief >= 0 && vorigeActief != activeLamp) {
-      stuurAanUit(vorigeActief, false);
-    }
+  if (activeLamp < 0) {
+    // Niets aan → zet lamp 0 aan
+    activeLamp = 0;
     helderheid = 100;
-    dimRichting = false;
+    stuurAanUit(activeLamp, true);
     stuurHelderheid(activeLamp, helderheid);
-    Serial.printf("Nu actief: %s\n", lampen[activeLamp].naam);
+    Serial.printf("Lamp aan: %s\n", lampen[activeLamp].naam);
+  } else {
+    // Lamp staat aan → zet uit
+    stuurAanUit(activeLamp, false);
+    activeLamp = -1;
+    Serial.println("Lamp uit.");
   }
 }
 
+// Lang drukken = dim omhoog/omlaag cyclus
 void actieLang() {
   if (activeLamp < 0) {
-    Serial.println("Niks aan, kan niet dimmen.");
+    // Niets aan → zet aan op 50%
+    activeLamp = 0;
+    helderheid = 50;
+    stuurAanUit(activeLamp, true);
+    stuurHelderheid(activeLamp, helderheid);
+    dimRichting = true;  // volgende keer omhoog
     return;
   }
 
@@ -368,14 +388,43 @@ void actieLang() {
     if (helderheid <= 10) dimRichting = true;
   }
 
+  Serial.printf("Dim: %d%%\n", helderheid);
   stuurHelderheid(activeLamp, helderheid);
 }
 
+// Dubbel drukken = alles uit
 void actieDubbel() {
   knipperLED(KLEUR_ALLES_UIT, 1, 100);
   allesUit();
-  handmatigeOverride = millis();  // voorkom auto-on na handmatige uit
-  Serial.println("Dubbel gedrukt, alles uit (override actief).");
+  handmatigeOverride = millis();
+  Serial.println("Dubbel: alles uit (override actief).");
+}
+
+// Triple drukken = volgende kleurmodus
+void actieTriple() {
+  if (activeLamp < 0) {
+    activeLamp = 0;
+    stuurAanUit(activeLamp, true);
+  }
+
+  kleurModus = (kleurModus + 1) % AANTAL_KLEURMODI;
+  Serial.printf("Kleurmodus: %s\n", kleurModusNaam[kleurModus]);
+
+  switch (kleurModus) {
+    case 0:  // wit
+      stuurKleurTemp(activeLamp, 500);
+      break;
+    case 1:  // warm
+      stuurKleurTemp(activeLamp, 0);
+      break;
+    case 2:  // koud
+      stuurKleurTemp(activeLamp, 1000);
+      break;
+    default:  // kleur via HSV
+      stuurKleur(activeLamp, kleurModusHSV[kleurModus][0],
+                 kleurModusHSV[kleurModus][1], kleurModusHSV[kleurModus][2]);
+      break;
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1190,22 +1239,29 @@ void loop() {
 
     if (duur >= LANG_DRUK_MS) {
       actieLang();
-      wachtOpDubbel = false;
+      knopTeller = 0;
     } else {
-      if (wachtOpDubbel && (nu - knopLosTijd) < DUBBEL_WINDOW) {
-        actieDubbel();
-        wachtOpDubbel = false;
+      // Kort gedrukt — tel op
+      if (knopTeller > 0 && (nu - knopLosTijd) < DUBBEL_WINDOW) {
+        knopTeller++;
       } else {
-        wachtOpDubbel = true;
-        knopLosTijd   = nu;
+        knopTeller = 1;
+      }
+      knopLosTijd = nu;
+
+      // Bij 3x meteen uitvoeren (niet wachten op timeout)
+      if (knopTeller >= 3) {
+        actieTriple();
+        knopTeller = 0;
       }
     }
   }
 
-  // Geen tweede druk gekomen → korte druk
-  if (wachtOpDubbel && (nu - knopLosTijd) >= DUBBEL_WINDOW) {
-    actieKort();
-    wachtOpDubbel = false;
+  // Wacht-window verlopen → voer actie uit op basis van teller
+  if (knopTeller > 0 && (nu - knopLosTijd) >= DUBBEL_WINDOW) {
+    if (knopTeller == 1) actieKort();
+    else if (knopTeller == 2) actieDubbel();
+    knopTeller = 0;
   }
 
   wasIngedrukt = ingedrukt;
