@@ -1054,19 +1054,22 @@ String maakStatusJson() {
 }
 
 void setupWeb() {
-  // Hoofdpagina
+  // Hoofdpagina — chunked transfer voor grote pagina
   webServer.on("/", HTTP_GET, []() {
-    webServer.send(200, "text/html",
-      "<html><body style='background:#1a1a2e;color:#fff;font-family:sans-serif;text-align:center;padding:40px'>"
-      "<h1>Lamp Controller</h1>"
-      "<p><a href='/api/aan' style='color:#4ecca3;font-size:2em'>AAN</a></p>"
-      "<p><a href='/api/uit' style='color:#e74c3c;font-size:2em'>UIT</a></p>"
-      "<p><a href='/api/dim/50' style='color:#e67e22;font-size:1.5em'>Dim 50%</a></p>"
-      "<p><a href='/api/kleur/rood' style='color:#f33'>Rood</a> "
-      "<a href='/api/kleur/blauw' style='color:#33f'>Blauw</a> "
-      "<a href='/api/kleur/groen' style='color:#3f3'>Groen</a></p>"
-      "<p><a href='/api/status' style='color:#888'>Status JSON</a></p>"
-      "</body></html>");
+    webServer.setContentLength(strlen_P(WEBPAGINA));
+    webServer.send(200, "text/html", "");
+    const char* p = WEBPAGINA;
+    size_t remaining = strlen_P(WEBPAGINA);
+    char buf[1025];
+    while (remaining > 0) {
+      size_t chunk = (remaining > 1024) ? 1024 : remaining;
+      memcpy_P(buf, p, chunk);
+      buf[chunk] = 0;
+      webServer.sendContent(buf);
+      p += chunk;
+      remaining -= chunk;
+      yield();
+    }
   });
 
   // Status API
