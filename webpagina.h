@@ -2,130 +2,56 @@
 #define WEBPAGINA_H
 
 const char WEBPAGINA[] PROGMEM = R"rawliteral(
-<!DOCTYPE html>
-<html lang="nl">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<title>Lamp</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#0f0f1a;color:#e0e0e0;max-width:400px;margin:0 auto;padding:12px}
-.h{text-align:center;padding:10px 0;font-size:1.2em;color:#fff;letter-spacing:1px}
-.c{background:linear-gradient(135deg,#1a1a2e,#16213e);border-radius:16px;padding:14px;margin:8px 0;box-shadow:0 4px 15px rgba(0,0,0,0.3)}
-.pb{width:100%;padding:16px;border:none;border-radius:12px;font-size:1.2em;font-weight:700;cursor:pointer;transition:all .2s;letter-spacing:1px}
-.pb:active{transform:scale(0.96)}
-.on{background:linear-gradient(135deg,#4ecca3,#38b2ac);color:#0f0f1a}
-.off{background:linear-gradient(135deg,#e74c3c,#c0392b);color:#fff}
-.sl{margin:10px 0}
-.sl label{display:flex;justify-content:space-between;font-size:.85em;color:#888;margin-bottom:4px}
-.sl label span:last-child{color:#4ecca3;font-weight:600}
-input[type=range]{-webkit-appearance:none;width:100%;height:8px;border-radius:4px;background:#2d3a5c;outline:none}
-input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:28px;height:28px;border-radius:50%;background:#4ecca3;cursor:pointer;box-shadow:0 2px 8px rgba(78,204,163,0.4)}
-.t{font-size:.8em;color:#666;text-transform:uppercase;letter-spacing:2px;margin:12px 0 6px}
-.kr{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;padding:4px 0}
-.kb{width:42px;height:42px;border-radius:50%;border:3px solid transparent;cursor:pointer;transition:all .15s;box-shadow:0 2px 8px rgba(0,0,0,0.3)}
-.kb:active,.kb.a{border-color:#fff;transform:scale(1.2);box-shadow:0 2px 12px rgba(255,255,255,0.3)}
-.sr{display:flex;flex-wrap:wrap;gap:6px}
-.sb{flex:1;min-width:70px;padding:10px 6px;border:none;border-radius:10px;background:#1e2a4a;color:#aaa;font-size:.85em;font-weight:600;cursor:pointer;transition:all .15s}
-.sb:active,.sb.a{background:#4ecca3;color:#0f0f1a}
-.tr{display:flex;gap:6px}
-.tb{flex:1;padding:10px 4px;border:none;border-radius:10px;background:#1e2a4a;color:#aaa;font-size:.85em;font-weight:600;cursor:pointer;transition:all .15s}
-.tb:active,.tb.a{background:#e67e22;color:#fff}
-.ti{text-align:center;color:#e67e22;font-size:.85em;margin-top:6px;min-height:1em}
-.sg{display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:.8em}
-.si{display:flex;justify-content:space-between;padding:4px 8px;background:#0f0f1a;border-radius:6px}
-.si span:first-child{color:#666}
-.si span:last-child{color:#4ecca3;font-weight:600}
-#cx{text-align:center;font-size:.75em;min-height:1em;margin-top:6px}
-.err{color:#e74c3c}
-</style>
-</head>
-<body>
-<div class="h">WOONKAMER LAMP</div>
-
-<div class="c">
-<button class="pb off" id="pw" onclick="tp()">UIT</button>
-</div>
-
-<div class="c">
-<div class="sl"><label><span>Helderheid</span><span id="dv">100%</span></label>
-<input type="range" id="ds" min="5" max="100" value="100" oninput="dp(this.value)" onchange="sd(this.value)"></div>
-<div class="sl"><label><span>Temperatuur</span><span id="tl">neutraal</span></label>
-<input type="range" id="ts" min="0" max="1000" value="500" oninput="tv(this.value)" onchange="st(this.value)"></div>
-</div>
-
-<div class="c">
-<div class="t">Kleuren</div>
-<div class="kr">
-<div class="kb" style="background:#fff" onclick="sk('wit')"></div>
-<div class="kb" style="background:#ff3333" onclick="sk('rood')"></div>
-<div class="kb" style="background:#33cc33" onclick="sk('groen')"></div>
-<div class="kb" style="background:#3366ff" onclick="sk('blauw')"></div>
-<div class="kb" style="background:#ffdd00" onclick="sk('geel')"></div>
-<div class="kb" style="background:#aa33ff" onclick="sk('paars')"></div>
-<div class="kb" style="background:#ff8800" onclick="sk('oranje')"></div>
-<div class="kb" style="background:#ff66aa" onclick="sk('roze')"></div>
-<div class="kb" style="background:#00dddd" onclick="sk('cyaan')"></div>
-</div>
-</div>
-
-<div class="c">
-<div class="t">Scenes</div>
-<div class="sr">
-<button class="sb" onclick="ss('film')">Film</button>
-<button class="sb" onclick="ss('lezen')">Lezen</button>
-<button class="sb" onclick="ss('feest')">Feest</button>
-<button class="sb" onclick="ss('ontspannen')">Relax</button>
-<button class="sb" onclick="ss('nacht')">Nacht</button>
-<button class="sb" onclick="ss('energiek')">Energie</button>
-</div>
-</div>
-
-<div class="c">
-<div class="t">Timer</div>
-<div class="tr">
-<button class="tb" onclick="stt(5)">5m</button>
-<button class="tb" onclick="stt(15)">15m</button>
-<button class="tb" onclick="stt(30)">30m</button>
-<button class="tb" onclick="stt(60)">1u</button>
-<button class="tb" onclick="stt(0)">&#x2715;</button>
-</div>
-<div class="ti" id="ti"></div>
-</div>
-
-<div class="c">
-<div class="t">Status</div>
-<div class="sg">
-<div class="si"><span>WiFi</span><span id="sw">-</span></div>
-<div class="si"><span>BLE</span><span id="sb">-</span></div>
-<div class="si"><span>Thuis</span><span id="sa">-</span></div>
-<div class="si"><span>Buiten</span><span id="sd">-</span></div>
-<div class="si"><span>Uptime</span><span id="su">-</span></div>
-<div class="si"><span>RAM</span><span id="sm">-</span></div>
-</div>
-</div>
-<div id="cx"></div>
-
+<!DOCTYPE html><html><head><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Lamp</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:sans-serif;background:#111;color:#eee;max-width:380px;margin:0 auto;padding:10px}
+.c{background:#1a1a2e;border-radius:12px;padding:12px;margin:6px 0}.b{width:100%;padding:14px;border:none;border-radius:10px;font-size:1.1em;font-weight:700;cursor:pointer}
+.on{background:#4ecca3;color:#111}.off{background:#e74c3c;color:#fff}.r{display:flex;flex-wrap:wrap;gap:6px}
+.s{flex:1;min-width:55px;padding:8px;border:none;border-radius:8px;background:#222;color:#aaa;font-size:.8em;cursor:pointer}
+.s:active{background:#4ecca3;color:#111}.k{width:36px;height:36px;border-radius:50%;border:2px solid transparent;cursor:pointer;display:inline-block;margin:3px}
+.k:active{border-color:#fff}input[type=range]{width:100%;margin:6px 0;height:6px;-webkit-appearance:none;background:#333;border-radius:3px;outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:#4ecca3;cursor:pointer}
+.l{font-size:.75em;color:#666;display:flex;justify-content:space-between}.v{color:#4ecca3}h2{font-size:.7em;color:#555;letter-spacing:1px;margin:8px 0 4px}
+</style></head><body>
+<div class=c><button class="b off" id=pw onclick="tp()">UIT</button></div>
+<div class=c><div class=l><span>Helderheid</span><span class=v id=dv>100%</span></div>
+<input type=range id=ds min=5 max=100 value=100 oninput="dv.textContent=this.value+'%'" onchange="f('dim/'+this.value)">
+<div class=l><span>Temperatuur</span><span class=v id=tl>midden</span></div>
+<input type=range id=ts min=0 max=1000 value=500 oninput="tl.textContent=this.value<300?'warm':this.value>700?'koud':'midden'" onchange="f('temp/'+this.value)"></div>
+<div class=c><h2>KLEUREN</h2>
+<div class=k style="background:#fff" onclick="f('kleur/wit')"></div>
+<div class=k style="background:#f33" onclick="f('kleur/rood')"></div>
+<div class=k style="background:#3c3" onclick="f('kleur/groen')"></div>
+<div class=k style="background:#36f" onclick="f('kleur/blauw')"></div>
+<div class=k style="background:#fd0" onclick="f('kleur/geel')"></div>
+<div class=k style="background:#a3f" onclick="f('kleur/paars')"></div>
+<div class=k style="background:#f80" onclick="f('kleur/oranje')"></div>
+<div class=k style="background:#f6a" onclick="f('kleur/roze')"></div>
+<div class=k style="background:#0dd" onclick="f('kleur/cyaan')"></div></div>
+<div class=c><h2>SCENES</h2><div class=r>
+<button class=s onclick="f('scene/film')">Film</button>
+<button class=s onclick="f('scene/lezen')">Lezen</button>
+<button class=s onclick="f('scene/feest')">Feest</button>
+<button class=s onclick="f('scene/ontspannen')">Relax</button>
+<button class=s onclick="f('scene/nacht')">Nacht</button>
+<button class=s onclick="f('scene/energiek')">Energie</button></div></div>
+<div class=c><h2>TIMER</h2><div class=r>
+<button class=s onclick="f('timer/5')">5m</button>
+<button class=s onclick="f('timer/15')">15m</button>
+<button class=s onclick="f('timer/30')">30m</button>
+<button class=s onclick="f('timer/60')">1u</button>
+<button class=s onclick="f('timer/0')">&#x2715;</button></div>
+<div id=ti style="text-align:center;color:#e67e22;font-size:.8em;margin-top:4px"></div></div>
+<div class=c><h2>STATUS</h2><div id=st style="font-size:.75em;color:#888">Laden...</div></div>
 <script>
-var te=0;
-function q(p,f){fetch('/api/'+p).then(r=>r.json()).then(d=>{if(f)f(d);document.getElementById('cx').textContent='';}).catch(()=>{document.getElementById('cx').className='err';document.getElementById('cx').textContent='Geen verbinding';})}
-function tp(){var b=document.getElementById('pw');q(b.classList.contains('off')?'aan':'uit',u)}
-function sd(v){q('dim/'+v,u)}
-function dp(v){document.getElementById('dv').textContent=v+'%'}
-function st(v){q('temp/'+v,u)}
-function tv(v){var n=parseInt(v);document.getElementById('tl').textContent=n<300?'warm':n>700?'koud':'neutraal'}
-function sk(k){q('kleur/'+k,u);document.querySelectorAll('.kb').forEach(b=>b.classList.remove('a'));if(event&&event.target)event.target.classList.add('a')}
-function ss(s){q('scene/'+s,u);document.querySelectorAll('.sb').forEach(b=>b.classList.remove('a'));if(event&&event.target)event.target.classList.add('a')}
-function stt(m){q('timer/'+m,function(d){u(d);if(m>0){te=Date.now()+m*60000}else{te=0}ut()});document.querySelectorAll('.tb').forEach(b=>b.classList.remove('a'));if(m>0&&event&&event.target)event.target.classList.add('a')}
-function ut(){var e=document.getElementById('ti');if(te<=0){e.textContent='';return}var r=Math.max(0,Math.round((te-Date.now())/60000));if(r<=0){e.textContent='';te=0;return}e.textContent='Uit over '+r+' min'}
-function u(d){if(!d)return;var b=document.getElementById('pw');if(d.aan){b.textContent='AAN';b.className='pb on'}else{b.textContent='UIT';b.className='pb off'}document.getElementById('ds').value=d.helderheid||100;document.getElementById('dv').textContent=(d.helderheid||100)+'%';if(d.wifi)document.getElementById('sw').textContent=d.wifi;if(d.ble!==undefined)document.getElementById('sb').textContent=d.ble?'ja':'nee';if(d.aanwezig)document.getElementById('sa').textContent=d.aanwezig;if(d.donker!==undefined)document.getElementById('sd').textContent=d.donker?'donker':'licht';if(d.uptime)document.getElementById('su').textContent=d.uptime;if(d.geheugen)document.getElementById('sm').textContent=d.geheugen;if(d.timer>0)te=Date.now()+d.timer*1000}
-function pl(){q('status',u);ut()}
-pl();setInterval(pl,3000);setInterval(ut,10000);
-</script>
-</body>
-</html>
+var pw=document.getElementById('pw'),te=0;
+function f(p){fetch('/api/'+p).then(r=>r.json()).then(u).catch(()=>{})}
+function tp(){f(pw.classList.contains('off')?'aan':'uit')}
+function u(d){if(!d)return;if(d.aan){pw.textContent='AAN';pw.className='b on'}else{pw.textContent='UIT';pw.className='b off'}
+document.getElementById('ds').value=d.helderheid||100;document.getElementById('dv').textContent=(d.helderheid||100)+'%';
+if(d.timer>0)te=Date.now()+d.timer*1000;var s='';if(d.wifi)s+=d.wifi;if(d.aanwezig)s+=' | '+d.aanwezig;if(d.uptime)s+=' | '+d.uptime;document.getElementById('st').textContent=s||'-';
+var ti=document.getElementById('ti');if(te>0){var m=Math.round((te-Date.now())/60000);ti.textContent=m>0?'Uit over '+m+'m':''}else ti.textContent=''}
+setInterval(function(){f('status')},5000);f('status');
+</script></body></html>
 )rawliteral";
 
 #endif
