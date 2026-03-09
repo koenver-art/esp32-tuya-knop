@@ -21,6 +21,7 @@
 #define FEATURE_BLE          true     // BLE telefoonbediening (GATT server)
 #define FEATURE_PRESENCE     true     // BLE aanwezigheidsdetectie (via service UUID voor Apple apparaten)
 #define FEATURE_ZONBEREKENING true    // Zonsopkomst/-ondergang berekening
+#define FEATURE_WEB          true     // Webinterface met API
 
 // ── Lampen ────────────────────────────────────────────────────────
 #define MAX_LAMPEN  3     // maximaal aantal lampen (pas aan in secrets.h)

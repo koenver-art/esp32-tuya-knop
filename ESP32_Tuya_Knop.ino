@@ -46,6 +46,11 @@
   #include <NimBLEDevice.h>
 #endif
 
+#if FEATURE_WEB
+  #include <WebServer.h>
+  #include "webpagina.h"
+#endif
+
 // ── Forward declaraties ───────────────────────────────────────────
 void publiceerStatus();
 void publiceerAanwezigheid();
@@ -97,6 +102,12 @@ unsigned long laatsteZonCheck     = 0;
 unsigned long laatsteScan         = 0;
 unsigned long laatsteNtpSync      = 0;
 unsigned long handmatigeOverride  = 0;  // tijdstip van laatste handmatige "uit"
+unsigned long timerUitTijd       = 0;  // millis() wanneer lamp uit moet (0 = geen timer)
+
+// ── Webserver ─────────────────────────────────────────────────
+#if FEATURE_WEB
+  WebServer webServer(80);
+#endif
 
 // ── Zonberekening ───────────────────────────────────────────────
 double zonTransit          = 0.0;  // uur UTC
@@ -992,6 +1003,192 @@ void publiceerDonker() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+//  Webserver & API
+// ═══════════════════════════════════════════════════════════════════
+
+#if FEATURE_WEB
+
+// JSON status response
+String maakStatusJson() {
+  String json = "{";
+  json += "\"aan\":" + String(activeLamp >= 0 && lampAan[activeLamp >= 0 ? activeLamp : 0] ? "true" : "false");
+  json += ",\"lamp\":\"" + String(activeLamp >= 0 ? lampen[activeLamp].naam : "Geen") + "\"";
+  json += ",\"helderheid\":" + String(helderheid);
+  json += ",\"kleurModus\":\"" + String(kleurModusNaam[kleurModus]) + "\"";
+  json += ",\"wifi\":\"" + WiFi.localIP().toString() + "\"";
+  #if FEATURE_BLE
+    json += ",\"ble\":" + String(bleVerbonden ? "true" : "false");
+  #endif
+
+  // Aanwezigheid
+  #if FEATURE_PRESENCE
+    String wie = "";
+    for (int i = 0; i < AANTAL_BLE_APPARATEN; i++) {
+      if (apparaatStatus[i].aanwezig) {
+        if (wie.length() > 0) wie += ", ";
+        wie += bleApparaten[i].naam;
+      }
+    }
+    json += ",\"aanwezig\":\"" + (wie.length() > 0 ? wie : String("niemand")) + "\"";
+  #endif
+
+  #if FEATURE_ZONBEREKENING
+    json += ",\"donker\":" + String(hetIsDonker ? "true" : "false");
+  #endif
+
+  // Timer
+  if (timerUitTijd > 0 && millis() < timerUitTijd) {
+    json += ",\"timer\":" + String((timerUitTijd - millis()) / 1000);
+  } else {
+    json += ",\"timer\":0";
+  }
+
+  // Uptime
+  unsigned long sec = millis() / 1000;
+  int uren = sec / 3600;
+  int minuten = (sec % 3600) / 60;
+  json += ",\"uptime\":\"" + String(uren) + "u " + String(minuten) + "m\"";
+  json += ",\"geheugen\":\"" + String(ESP.getFreeHeap() / 1024) + " kB\"";
+  json += "}";
+  return json;
+}
+
+void setupWeb() {
+  // Hoofdpagina
+  webServer.on("/", HTTP_GET, []() {
+    webServer.send_P(200, "text/html", WEBPAGINA);
+  });
+
+  // Status API
+  webServer.on("/api/status", HTTP_GET, []() {
+    webServer.send(200, "application/json", maakStatusJson());
+  });
+
+  // Aan
+  webServer.on("/api/aan", HTTP_GET, []() {
+    if (activeLamp < 0) activeLamp = 0;
+    stuurAanUit(activeLamp, true);
+    webServer.send(200, "application/json", maakStatusJson());
+  });
+
+  // Uit
+  webServer.on("/api/uit", HTTP_GET, []() {
+    allesUit();
+    handmatigeOverride = millis();
+    webServer.send(200, "application/json", maakStatusJson());
+  });
+
+  // Dim: /api/dim/50
+  webServer.on("/api/dim", HTTP_GET, []() {
+    // Wordt afgehandeld via onNotFound
+  });
+
+  // Kleur naam: /api/kleur/rood
+  // Kleurtemperatuur: /api/temp/500
+  // Scene: /api/scene/film
+  // Timer: /api/timer/30
+
+  // Alle dynamische paden via onNotFound
+  webServer.onNotFound([]() {
+    String uri = webServer.uri();
+
+    // /api/dim/XX
+    if (uri.startsWith("/api/dim/")) {
+      int pct = uri.substring(9).toInt();
+      pct = constrain(pct, 0, 100);
+      if (activeLamp < 0) activeLamp = 0;
+      helderheid = pct;
+      stuurHelderheid(activeLamp, helderheid);
+      webServer.send(200, "application/json", maakStatusJson());
+      return;
+    }
+
+    // /api/kleur/naam
+    if (uri.startsWith("/api/kleur/")) {
+      String kleur = uri.substring(11);
+      if (activeLamp < 0) activeLamp = 0;
+      verwerkCommando(kleur);
+      webServer.send(200, "application/json", maakStatusJson());
+      return;
+    }
+
+    // /api/temp/waarde
+    if (uri.startsWith("/api/temp/")) {
+      String val = uri.substring(10);
+      if (val == "warm") {
+        if (activeLamp < 0) activeLamp = 0;
+        stuurKleurTemp(activeLamp, 0);
+      } else if (val == "koud") {
+        if (activeLamp < 0) activeLamp = 0;
+        stuurKleurTemp(activeLamp, 1000);
+      } else if (val == "neutraal") {
+        if (activeLamp < 0) activeLamp = 0;
+        stuurKleurTemp(activeLamp, 500);
+      } else {
+        int t = val.toInt();
+        if (activeLamp < 0) activeLamp = 0;
+        stuurKleurTemp(activeLamp, constrain(t, 0, 1000));
+      }
+      webServer.send(200, "application/json", maakStatusJson());
+      return;
+    }
+
+    // /api/scene/naam
+    if (uri.startsWith("/api/scene/")) {
+      String scene = uri.substring(11);
+      if (activeLamp < 0) activeLamp = 0;
+
+      if (scene == "film") {
+        stuurKleurTemp(activeLamp, 100);
+        helderheid = 20;
+        stuurHelderheid(activeLamp, 20);
+      } else if (scene == "lezen") {
+        stuurKleurTemp(activeLamp, 800);
+        helderheid = 80;
+        stuurHelderheid(activeLamp, 80);
+      } else if (scene == "feest") {
+        stuurKleur(activeLamp, random(0, 360), 1000, 1000);
+      } else if (scene == "ontspannen") {
+        stuurKleurTemp(activeLamp, 200);
+        helderheid = 40;
+        stuurHelderheid(activeLamp, 40);
+      } else if (scene == "nacht") {
+        stuurKleur(activeLamp, 30, 800, 300);
+        helderheid = 10;
+        stuurHelderheid(activeLamp, 10);
+      } else if (scene == "energiek") {
+        stuurKleurTemp(activeLamp, 900);
+        helderheid = 100;
+        stuurHelderheid(activeLamp, 100);
+      }
+      webServer.send(200, "application/json", maakStatusJson());
+      return;
+    }
+
+    // /api/timer/minuten
+    if (uri.startsWith("/api/timer/")) {
+      int minuten = uri.substring(11).toInt();
+      if (minuten > 0) {
+        timerUitTijd = millis() + (unsigned long)minuten * 60000UL;
+        Serial.printf("Timer: lamp uit over %d minuten\n", minuten);
+      } else {
+        timerUitTijd = 0;
+        Serial.println("Timer geannuleerd");
+      }
+      webServer.send(200, "application/json", maakStatusJson());
+      return;
+    }
+
+    webServer.send(404, "text/plain", "Niet gevonden");
+  });
+
+  webServer.begin();
+  Serial.printf("Webserver gestart op http://%s/\n", WiFi.localIP().toString().c_str());
+}
+
+#endif // FEATURE_WEB
+
+// ═══════════════════════════════════════════════════════════════════
 //  WiFi verbinding (via WiFi Manager)
 // ═══════════════════════════════════════════════════════════════════
 
@@ -1094,6 +1291,10 @@ void setup() {
     setupPresence();
   #endif
 
+  #if FEATURE_WEB
+    setupWeb();
+  #endif
+
   laatsteActiviteit = millis();
 
   // Geheugen check
@@ -1111,6 +1312,9 @@ void setup() {
     Serial.printf("  Zon            = lat %.2f, lon %.2f\n", LOCATIE_LAT, LOCATIE_LON);
     Serial.printf("  Donker         = %s\n", hetIsDonker ? "ja" : "nee");
   }
+  #if FEATURE_WEB
+    Serial.printf("  Web            = http://%s/\n", WiFi.localIP().toString().c_str());
+  #endif
 
   // Groene flash = klaar
   knipperLED(CRGB(0, 255, 0), 2, 150);
@@ -1126,6 +1330,18 @@ void loop() {
 
   // OTA afhandelen
   if (FEATURE_OTA) ArduinoOTA.handle();
+
+  // Webserver afhandelen
+  #if FEATURE_WEB
+    webServer.handleClient();
+  #endif
+
+  // Timer check
+  if (timerUitTijd > 0 && nu >= timerUitTijd) {
+    timerUitTijd = 0;
+    Serial.println("Timer: lamp uit!");
+    allesUit();
+  }
 
   // MQTT afhandelen
   if (FEATURE_MQTT) {
