@@ -1210,6 +1210,9 @@ void verbindWiFi() {
 
   Serial.printf("Verbonden! IP: %s\n", WiFi.localIP().toString().c_str());
   toonUit();
+
+  // WiFiManager webserver stoppen zodat onze WebServer poort 80 kan gebruiken
+  wifiManager.stopWebPortal();
 }
 
 // ═══════════════════════════════════════════════════════════════════
