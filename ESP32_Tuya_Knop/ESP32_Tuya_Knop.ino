@@ -106,6 +106,17 @@ PubSubClient  mqtt(espClient);
 #if FEATURE_BLE
   NimBLEServer* bleServer = nullptr;
   bool bleVerbonden = false;
+
+  // BLE commando queue — callbacks zetten vlaggen, loop() voert uit
+  // (BLE callbacks draaien op NimBLE stack, te klein voor Tuya TCP+crypto)
+  volatile bool bleCmdPower     = false;
+  volatile int  bleCmdPowerVal  = -1;   // 0=uit, 1=aan
+  volatile bool bleCmdDim       = false;
+  volatile int  bleCmdDimVal    = -1;   // 0-100
+  volatile bool bleCmdLamp      = false;
+  volatile int  bleCmdLampVal   = -1;   // lamp index
+  volatile bool bleCmdTekst     = false;
+  char          bleCmdTekstBuf[64] = "";
 #endif
 
 #if FEATURE_PRESENCE
@@ -379,23 +390,13 @@ class ServerCallbacks : public NimBLEServerCallbacks {
 };
 
 // Lamp selectie: schrijf 0 (uit) of 1-3 (lamp nummer)
+// Zet alleen vlag — uitvoering in loop() (BLE stack te klein voor Tuya)
 class LampCallback : public NimBLECharacteristicCallbacks {
   void onWrite(NimBLECharacteristic* pChar, NimBLEConnInfo& connInfo) override {
     uint8_t waarde = pChar->getValue<uint8_t>();
-    Serial.printf("BLE: lamp → %d\n", waarde);
-    laatsteActiviteit = millis();
-
-    if (waarde == 0) {
-      allesUit();
-    } else if (waarde >= 1 && waarde <= AANTAL_LAMPEN) {
-      int nieuweLamp = waarde - 1;
-      if (activeLamp >= 0 && activeLamp != nieuweLamp) {
-        stuurAanUit(activeLamp, false);
-      }
-      activeLamp = nieuweLamp;
-      helderheid = 100;
-      stuurHelderheid(activeLamp, helderheid);
-    }
+    Serial.printf("BLE: lamp → %d (queued)\n", waarde);
+    bleCmdLampVal = waarde;
+    bleCmdLamp = true;
   }
 };
 
@@ -403,13 +404,9 @@ class LampCallback : public NimBLECharacteristicCallbacks {
 class HelderheidCallback : public NimBLECharacteristicCallbacks {
   void onWrite(NimBLECharacteristic* pChar, NimBLEConnInfo& connInfo) override {
     uint8_t waarde = pChar->getValue<uint8_t>();
-    Serial.printf("BLE: helderheid → %d%%\n", waarde);
-    laatsteActiviteit = millis();
-
-    if (activeLamp >= 0) {
-      helderheid = constrain(waarde, 0, 100);
-      stuurHelderheid(activeLamp, helderheid);
-    }
+    Serial.printf("BLE: helderheid → %d%% (queued)\n", waarde);
+    bleCmdDimVal = waarde;
+    bleCmdDim = true;
   }
 };
 
@@ -417,16 +414,9 @@ class HelderheidCallback : public NimBLECharacteristicCallbacks {
 class PowerCallback : public NimBLECharacteristicCallbacks {
   void onWrite(NimBLECharacteristic* pChar, NimBLEConnInfo& connInfo) override {
     uint8_t waarde = pChar->getValue<uint8_t>();
-    Serial.printf("BLE: power → %d\n", waarde);
-    laatsteActiviteit = millis();
-
-    if (waarde == 0) {
-      allesUit();
-      handmatigeOverride = millis();
-    } else {
-      if (activeLamp < 0) activeLamp = 0;
-      stuurAanUit(activeLamp, true);
-    }
+    Serial.printf("BLE: power → %d (queued)\n", waarde);
+    bleCmdPowerVal = waarde;
+    bleCmdPower = true;
   }
 };
 
@@ -434,10 +424,10 @@ class PowerCallback : public NimBLECharacteristicCallbacks {
 class CommandoCallback : public NimBLECharacteristicCallbacks {
   void onWrite(NimBLECharacteristic* pChar, NimBLEConnInfo& connInfo) override {
     std::string raw = pChar->getValue();
-    String bericht = String(raw.c_str());
-    Serial.printf("BLE: commando → %s\n", bericht.c_str());
-    laatsteActiviteit = millis();
-    verwerkCommando(bericht);
+    Serial.printf("BLE: commando → %s (queued)\n", raw.c_str());
+    strncpy(bleCmdTekstBuf, raw.c_str(), sizeof(bleCmdTekstBuf) - 1);
+    bleCmdTekstBuf[sizeof(bleCmdTekstBuf) - 1] = '\0';
+    bleCmdTekst = true;
   }
 };
 
@@ -941,6 +931,50 @@ void loop() {
     toonUit();
     updateLED();
   }
+
+  // ── BLE commando queue verwerken (op main stack) ──────────────
+  #if FEATURE_BLE
+    if (bleCmdPower) {
+      bleCmdPower = false;
+      laatsteActiviteit = nu;
+      if (bleCmdPowerVal == 0) {
+        allesUit();
+        handmatigeOverride = nu;
+      } else {
+        if (activeLamp < 0) activeLamp = 0;
+        stuurAanUit(activeLamp, true);
+      }
+    }
+    if (bleCmdDim) {
+      bleCmdDim = false;
+      laatsteActiviteit = nu;
+      if (activeLamp >= 0) {
+        helderheid = constrain(bleCmdDimVal, 0, 100);
+        stuurHelderheid(activeLamp, helderheid);
+      }
+    }
+    if (bleCmdLamp) {
+      bleCmdLamp = false;
+      laatsteActiviteit = nu;
+      int waarde = bleCmdLampVal;
+      if (waarde == 0) {
+        allesUit();
+      } else if (waarde >= 1 && waarde <= AANTAL_LAMPEN) {
+        int nieuweLamp = waarde - 1;
+        if (activeLamp >= 0 && activeLamp != nieuweLamp) {
+          stuurAanUit(activeLamp, false);
+        }
+        activeLamp = nieuweLamp;
+        helderheid = 100;
+        stuurHelderheid(activeLamp, helderheid);
+      }
+    }
+    if (bleCmdTekst) {
+      bleCmdTekst = false;
+      laatsteActiviteit = nu;
+      verwerkCommando(String(bleCmdTekstBuf));
+    }
+  #endif
 
   // NTP hersynch (elke uur)
   if (nu - laatsteNtpSync >= NTP_SYNC_INTERVAL_MS) {
