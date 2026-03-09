@@ -675,6 +675,22 @@ void verwerkCommando(String bericht) {
       }
     }
   }
+  else if (bericht == "aan" || bericht == "on") {
+    if (activeLamp < 0) activeLamp = 0;
+    stuurAanUit(activeLamp, true);
+  }
+  else if (bericht == "uit" || bericht == "off") {
+    allesUit();
+    handmatigeOverride = millis();
+  }
+  else if (bericht.startsWith("dim ") || bericht.startsWith("dim_")) {
+    int pct = bericht.substring(4).toInt();
+    if (pct >= 0 && pct <= 100) {
+      if (activeLamp < 0) activeLamp = 0;
+      helderheid = pct;
+      stuurHelderheid(activeLamp, pct);
+    }
+  }
   #if FEATURE_PRESENCE
   else if (bericht == "presence_on") {
     Serial.println("Aanwezigheidsdetectie ingeschakeld via commando.");
