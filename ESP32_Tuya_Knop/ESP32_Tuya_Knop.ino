@@ -106,7 +106,7 @@ unsigned long timerUitTijd       = 0;  // millis() wanneer lamp uit moet (0 = ge
 
 // ── Webserver ─────────────────────────────────────────────────
 #if FEATURE_WEB
-  WebServer webServer(80);
+  WebServer webServer(8080);
 #endif
 
 // ── Zonberekening ───────────────────────────────────────────────
