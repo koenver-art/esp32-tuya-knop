@@ -52,6 +52,8 @@ void publiceerAanwezigheid();
 void publiceerDonker();
 void verwerkCommando(String bericht);
 void updateLED();
+bool stuurKleur(int idx, int hue, int sat, int val);
+bool stuurKleurTemp(int idx, int temp);
 
 // ── Afgeleide constanten ──────────────────────────────────────────
 const int AANTAL_LAMPEN     = sizeof(lampen) / sizeof(lampen[0]);
@@ -233,6 +235,83 @@ bool stuurHelderheid(int idx, int pct) {
     Serial.printf("[%s] Fout: dim commando mislukt!\n", lampen[idx].naam);
     knipperLED(KLEUR_FOUT, 5, 80);
     updateLED();
+    return false;
+  }
+
+  updateLED();
+  publiceerStatus();
+  return true;
+}
+
+// ── Kleur instellen (HSV via Tuya DP 24) ─────────────────────────
+// Tuya HSV formaat: "HHHHSSSSVVVV" (hex, H=0-360, S=0-1000, V=0-1000)
+bool stuurKleur(int idx, int hue, int sat, int val) {
+  if (idx < 0 || idx >= AANTAL_LAMPEN) return false;
+  Serial.printf("[%s] kleur → H:%d S:%d V:%d\n", lampen[idx].naam, hue, sat, val);
+
+  pauzeerScan();
+
+  EspTuya tuya;
+  if (!tuya.begin(lampen[idx].ip, lampen[idx].localKey, lampen[idx].versie)) {
+    Serial.printf("[%s] Fout: kan niet verbinden!\n", lampen[idx].naam);
+    knipperLED(KLEUR_FOUT, 5, 80);
+    return false;
+  }
+
+  if (!lampAan[idx]) {
+    tuya.setBool(DP_POWER, true);
+    lampAan[idx] = true;
+    delay(200);
+  }
+
+  // HSV als hex string: HHHH SSSS VVVV
+  char kleurData[16];
+  snprintf(kleurData, sizeof(kleurData), "%04x%04x%04x", hue, sat, val);
+
+  // Mode naar "colour" + kleurdata tegelijk
+  char dps[128];
+  snprintf(dps, sizeof(dps), "\"%d\":\"colour\",\"%d\":\"%s\"", DP_MODE, DP_COLOUR, kleurData);
+
+  if (!tuya.setMultiple(dps)) {
+    Serial.printf("[%s] Fout: kleur commando mislukt!\n", lampen[idx].naam);
+    knipperLED(KLEUR_FOUT, 5, 80);
+    return false;
+  }
+
+  updateLED();
+  publiceerStatus();
+  return true;
+}
+
+// ── Kleurtemperatuur instellen (DP 23) ───────────────────────────
+// 0 = warm wit, 1000 = koud wit
+bool stuurKleurTemp(int idx, int temp) {
+  if (idx < 0 || idx >= AANTAL_LAMPEN) return false;
+  int tuyaTemp = constrain(temp, 0, 1000);
+  Serial.printf("[%s] kleurtemp → %d\n", lampen[idx].naam, tuyaTemp);
+
+  pauzeerScan();
+
+  EspTuya tuya;
+  if (!tuya.begin(lampen[idx].ip, lampen[idx].localKey, lampen[idx].versie)) {
+    Serial.printf("[%s] Fout: kan niet verbinden!\n", lampen[idx].naam);
+    knipperLED(KLEUR_FOUT, 5, 80);
+    return false;
+  }
+
+  if (!lampAan[idx]) {
+    tuya.setBool(DP_POWER, true);
+    lampAan[idx] = true;
+    delay(200);
+  }
+
+  // Mode naar "white" + temperatuur
+  char dps[128];
+  snprintf(dps, sizeof(dps), "\"%d\":\"white\",\"%d\":%d", DP_MODE, DP_TEMP, tuyaTemp);
+
+  if (!tuya.setMultiple(dps)) {
+    Serial.printf("[%s] Fout: kleurtemp commando mislukt!\n", lampen[idx].naam);
+    knipperLED(KLEUR_FOUT, 5, 80);
     return false;
   }
 
@@ -690,6 +769,76 @@ void verwerkCommando(String bericht) {
       helderheid = pct;
       stuurHelderheid(activeLamp, pct);
     }
+  }
+  // ── Kleuren (naam → HSV) ──────────────────────────────────────
+  else if (bericht == "rood" || bericht == "red") {
+    if (activeLamp < 0) activeLamp = 0;
+    stuurKleur(activeLamp, 0, 1000, 1000);
+  }
+  else if (bericht == "groen" || bericht == "green") {
+    if (activeLamp < 0) activeLamp = 0;
+    stuurKleur(activeLamp, 120, 1000, 1000);
+  }
+  else if (bericht == "blauw" || bericht == "blue") {
+    if (activeLamp < 0) activeLamp = 0;
+    stuurKleur(activeLamp, 240, 1000, 1000);
+  }
+  else if (bericht == "geel" || bericht == "yellow") {
+    if (activeLamp < 0) activeLamp = 0;
+    stuurKleur(activeLamp, 60, 1000, 1000);
+  }
+  else if (bericht == "paars" || bericht == "purple") {
+    if (activeLamp < 0) activeLamp = 0;
+    stuurKleur(activeLamp, 280, 1000, 1000);
+  }
+  else if (bericht == "oranje" || bericht == "orange") {
+    if (activeLamp < 0) activeLamp = 0;
+    stuurKleur(activeLamp, 30, 1000, 1000);
+  }
+  else if (bericht == "roze" || bericht == "pink") {
+    if (activeLamp < 0) activeLamp = 0;
+    stuurKleur(activeLamp, 330, 1000, 1000);
+  }
+  else if (bericht == "cyaan" || bericht == "cyan") {
+    if (activeLamp < 0) activeLamp = 0;
+    stuurKleur(activeLamp, 180, 1000, 1000);
+  }
+  // ── Custom HSV: "kleur 120 800 500" ───────────────────────────
+  else if (bericht.startsWith("kleur ") || bericht.startsWith("color ")) {
+    if (activeLamp < 0) activeLamp = 0;
+    int spatie1 = bericht.indexOf(' ');
+    int spatie2 = bericht.indexOf(' ', spatie1 + 1);
+    int spatie3 = bericht.indexOf(' ', spatie2 + 1);
+    if (spatie2 > 0 && spatie3 > 0) {
+      int h = bericht.substring(spatie1 + 1, spatie2).toInt();
+      int s = bericht.substring(spatie2 + 1, spatie3).toInt();
+      int v = bericht.substring(spatie3 + 1).toInt();
+      stuurKleur(activeLamp, constrain(h, 0, 360), constrain(s, 0, 1000), constrain(v, 0, 1000));
+    }
+  }
+  // ── Kleurtemperatuur ──────────────────────────────────────────
+  else if (bericht == "warm") {
+    if (activeLamp < 0) activeLamp = 0;
+    stuurKleurTemp(activeLamp, 0);
+  }
+  else if (bericht == "koud" || bericht == "cold") {
+    if (activeLamp < 0) activeLamp = 0;
+    stuurKleurTemp(activeLamp, 1000);
+  }
+  else if (bericht == "neutraal" || bericht == "neutral") {
+    if (activeLamp < 0) activeLamp = 0;
+    stuurKleurTemp(activeLamp, 500);
+  }
+  else if (bericht.startsWith("temp ")) {
+    if (activeLamp < 0) activeLamp = 0;
+    int t = bericht.substring(5).toInt();
+    stuurKleurTemp(activeLamp, constrain(t, 0, 1000));
+  }
+  // ── Wit (terug naar normaal) ──────────────────────────────────
+  else if (bericht == "wit" || bericht == "white") {
+    if (activeLamp < 0) activeLamp = 0;
+    stuurKleurTemp(activeLamp, 500);
+    stuurHelderheid(activeLamp, 100);
   }
   #if FEATURE_PRESENCE
   else if (bericht == "presence_on") {

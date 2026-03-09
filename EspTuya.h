@@ -115,6 +115,29 @@ public:
     return _sendControl(json);
   }
 
+  bool setString(int dp, const char* value) {
+    if (!_ensureConnected()) return false;
+
+    char json[256];
+    snprintf(json, sizeof(json),
+      "{\"protocol\":5,\"t\":%lu,\"data\":{\"dps\":{\"%d\":\"%s\"}}}",
+      (unsigned long)time(nullptr), dp, value);
+
+    return _sendControl(json);
+  }
+
+  // Meerdere DPs tegelijk instellen (bijv. mode + kleurdata)
+  bool setMultiple(const char* dpsJson) {
+    if (!_ensureConnected()) return false;
+
+    char json[256];
+    snprintf(json, sizeof(json),
+      "{\"protocol\":5,\"t\":%lu,\"data\":{\"dps\":{%s}}}",
+      (unsigned long)time(nullptr), dpsJson);
+
+    return _sendControl(json);
+  }
+
   bool isConnected() { return _connected && _client.connected(); }
 
   void end() {

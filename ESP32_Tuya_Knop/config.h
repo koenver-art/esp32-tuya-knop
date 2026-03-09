@@ -49,9 +49,12 @@
 
 // ── Tuya DataPoints ───────────────────────────────────────────────
 // Specifiek voor de Action LSC Smart Connect lampen
-#define DP_POWER  20   // aan/uit (bool)
-#define DP_DIM    22   // helderheid (int, 10-1000)
-#define DP_MODE   21   // modus (white/colour/scene)
+#define DP_POWER    20   // aan/uit (bool)
+#define DP_MODE     21   // modus: "white", "colour", "scene" (string)
+#define DP_DIM      22   // helderheid (int, 10-1000)
+#define DP_TEMP     23   // kleurtemperatuur (int, 0=warm - 1000=koud)
+#define DP_COLOUR   24   // kleurdata (string, HSV: "HHHHSSSSVVVV" hex)
+#define DP_SCENE    25   // scene data (string)
 
 // ── BLE configuratie ────────────────────────────────────────────
 #define BLE_DEVICE_NAAM      "LampController"   // naam zichtbaar op telefoon
