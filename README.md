@@ -1,13 +1,12 @@
 # Woonkamer Lamp Controller
 
-Een ESP32-gebaseerde drukknop controller om Action (LSC Smart Connect) lampen in de woonkamer te bedienen via WiFi. Geen cloud, geen app, gewoon een knopje en klaar.
+Een draadloze knop om Action (LSC Smart Connect) lampen in de woonkamer te bedienen. Geen cloud, geen app, gewoon een knopje op tafel en klaar.
 
 **Auteur:** Koen Verhallen
 
-<!-- Vervang dit door een foto van het eindresultaat -->
-![Schema](images/ESP32_Tuya_Schema.png)
+![Atom Lite met Battery Base op tafel](images/componenten/atom_lite_batterij_opladen.jpg)
 
-> *Foto's van de build volgen zodra het prototype af is.*
+> *M5Stack Atom Lite + Atomic Battery Base — draadloos, oplaadbaar, past in je handpalm.*
 
 ## Waarom dit project?
 
@@ -15,94 +14,162 @@ Ik heb een MBO opleiding Mechatronica gedaan en werk inmiddels een paar jaar in 
 
 Het begon eigenlijk met een irritatie: elke avond drie verschillende lampen aan- en uitzetten via de Action-app op mijn telefoon. Telefoon zoeken, app openen, wachten tot hij verbindt, per lamp schakelen. Voor iets simpels als licht aan en uit voelde dat omslachtig.
 
-Toen dacht ik: dat moet toch simpeler kunnen? Gewoon een knopje aan de muur, zoals vroeger, maar dan slim. Eén knop waarmee je door de lampen heen bladert, kunt dimmen en alles in één keer uit zet.
+Toen dacht ik: dat moet toch simpeler kunnen? Gewoon een knopje, zoals vroeger, maar dan slim. Eén knop waarmee je door de lampen heen bladert, kunt dimmen en alles in één keer uit zet. En het moest draadloos op tafel kunnen liggen — geen kabel, geen gedoe.
 
-Dit project combineert veel van wat ik bij Mechatronica heb geleerd: embedded programmeren op een microcontroller, elektronisch ontwerpen (pull-up weerstanden, debouncing), netwerkprotocollen (WiFi, Tuya LAN), en het hele traject van idee naar werkend product, inclusief behuizing ontwerpen, een stuklijst maken en alles documenteren.
+Na een eerste prototype op een ESP32 DevKit (v1 en v2, met breadboard, losse LEDs en een 18650 batterij) bleek dat te groot en te rommellig. Toen ontdekte ik de **M5Stack Atom Lite**: een ESP32 van 24×24mm met ingebouwde knop en RGB LED. Met de **Atomic Battery Base** eronder heb je een compleet draadloos apparaatje dat op de salontafel ligt en weken meegaat op één lading.
 
-Het is bewust een low-budget project. De ESP32 kost een tientje, de lampen komen van de Action, en de rest zijn standaard componenten. Het hele project is voor minder dan €65 te bouwen. Geen dure hub, geen maandelijks abonnement, geen cloud, gewoon lokaal WiFi.
+Het project combineert veel van wat ik bij Mechatronica heb geleerd: embedded C++ op een microcontroller, draadloze protocollen (WiFi, BLE GATT, Tuya LAN), netwerkcommunicatie (MQTT, HTTP), en het hele traject van idee naar werkend product.
 
-De volgende stap is om het te koppelen aan Home Assistant, zodat de knop ook samenwerkt met de rest van mijn smarthome setup. Maar dat is voor later. Eerst moet de basis goed werken.
+Het is bewust een low-budget project. De Atom Lite kost een tientje, de batterij base ook, en de lampen komen van de Action. Het hele project is voor minder dan **€30** te bouwen. Geen dure hub, geen maandelijks abonnement, geen cloud, gewoon lokaal WiFi.
 
 Ik deel het hier zodat anderen het kunnen nabouwen, ervan kunnen leren, of het als basis kunnen gebruiken voor hun eigen projecten.
 
-*- Koen*
+*— Koen*
 
 ## Features
 
-- **Eén-knop bediening** - kort/lang/dubbel drukken voor verschillende functies
-- **WiFi Manager** - bij eerste boot WiFi configureren via je telefoon, geen code aanpassen
-- **OTA updates** - firmware draadloos updaten via WiFi
-- **Deep sleep** - na 60 seconden inactiviteit gaat de ESP32 slapen, batterij gaat maanden mee
-- **Batterij monitoring** - LEDs knipperen als de batterij bijna leeg is
-- **Foutafhandeling** - LED knippert snel als een lamp niet bereikbaar is
-- **MQTT / Home Assistant** - lampstatus publiceren, lampen aansturen vanuit je dashboard
-- **Dimmen omhoog en omlaag** - afwisselend bij lang drukken
-- **Status LEDs** - 3 LEDs tonen welke lamp aan staat
-- **Modulair** - elke feature kan aan/uit gezet worden via `#define` in de code
+- **Eén-knop bediening** — kort/lang/dubbel/triple drukken voor verschillende functies
+- **BLE telefoonbediening** — bedien je lampen via Bluetooth (nRF Connect, LightBlue, of Siri Shortcuts)
+- **Aanwezigheidsdetectie** — lampen automatisch aan als je thuiskomt (en het donker is)
+- **Zonsondergang automatisering** — berekent schemering, lampen gaan aan bij donker
+- **Webinterface** — bedieningspagina met knoppen, sliders, kleuren, scenes en timer
+- **Deep sleep** — slaapt na 60 seconden inactiviteit, batterij gaat weken mee
+- **WiFi Manager** — WiFi configureren via je telefoon, geen code aanpassen
+- **OTA updates** — firmware draadloos updaten via WiFi
+- **MQTT / Home Assistant** — lampstatus publiceren, lampen aansturen vanuit je dashboard
+- **RGB LED feedback** — kleur toont welke lamp actief is, knippert bij fouten
+- **Modulair** — elke feature kan aan/uit gezet worden via `#define` in config.h
 
 ## Wat doet het?
 
-Met een enkele drukknop op de ESP32 bedien je tot 3 slimme lampen in de woonkamer:
+Met de ingebouwde knop op de Atom Lite bedien je tot 3 slimme lampen:
 
 | Actie | Functie |
 |-------|---------|
 | **Kort drukken** | Wissel naar de volgende lamp (of alles uit) |
 | **Lang drukken** (>800ms) | Dim de actieve lamp met 20% |
-| **Dubbel drukken** (<400ms) | Alles uit |
+| **Dubbel drukken** (<400ms) | Alles uit → deep sleep na 5s |
+| **Triple drukken** | Volgende kleurmodus (wit → warm → koud → rood → groen → blauw → paars → oranje) |
 
-De lampen worden direct via het lokale WiFi-netwerk aangestuurd met het Tuya LAN protocol. Geen internet of cloud nodig.
+De lampen worden direct via het lokale WiFi-netwerk aangestuurd met het Tuya LAN protocol (v3.3 + v3.5). Geen internet of cloud nodig.
+
+Na 60 seconden inactiviteit gaat de controller in **deep sleep**. Druk op de knop om hem wakker te maken — hij is binnen 2 seconden weer online.
+
+## Hardware
+
+### Benodigdheden
+
+| Onderdeel | Specificatie | Prijs |
+|-----------|-------------|-------|
+| M5Stack Atom Lite | ESP32-PICO-D4, ingebouwde knop + RGB LED | ~€9 |
+| Atomic Battery Base | 200mAh LiPo, click-on, boost naar 5V | ~€9 |
+| Action LSC lampen (3x) | Smart Connect, E27, WiFi/Tuya | ~€13 |
+| USB-C kabel | Voor opladen | ~€0 |
+| **Totaal** | | **~€31** |
+
+Geen breadboard, geen losse draden, geen behuizing nodig. De Atom Lite klikt op de Battery Base en dat is het.
+
+### Componenten
+
+| | | |
+|:---:|:---:|:---:|
+| ![Atom Lite + Battery Base](images/componenten/atom_lite_batterij_opladen.jpg) | ![Battery Base](images/componenten/atomic_battery_base.jpg) | ![LSC lamp](images/componenten/lsc_lamp_woonkamer.jpg) |
+| Atom Lite + Battery Base | Atomic Battery Base (200mAh) | Action LSC Smart Connect lamp |
+
+### Battery Base
+
+De Atomic Battery Base klikt direct onder de Atom Lite (zelfde 24×24mm formaat):
+
+- **200mAh LiPo** batterij met ETA9085E boost converter → stabiele 5V
+- **Fysieke schakelaar**: ON = gebruiken, OFF = opladen via USB-C
+- **4 LED indicatoren**: tonen batterijniveau (25% / 50% / 75% / 100%)
+- **Oplaad indicatie**: blauw LED = bezig, groen LED = vol
+
+### Hardware diagram
+
+```
+┌─────────────────────────────────────┐
+│         M5Stack Atom Lite           │
+│  ┌─────────┐  ┌──────────────────┐  │
+│  │  Knop   │  │   RGB LED        │  │
+│  │  (G39)  │  │   (G27, SK6812)  │  │
+│  └─────────┘  └──────────────────┘  │
+│         ESP32-PICO-D4               │
+│         WiFi + BLE                  │
+│         4MB Flash, 520KB SRAM       │
+├─────────────────────────────────────┤
+│      Atomic Battery Base            │
+│  ┌──────────┐  ┌────────────────┐   │
+│  │ 200mAh   │  │ ON/OFF switch  │   │
+│  │ LiPo     │  │ 4x battery LED │   │
+│  └──────────┘  └────────────────┘   │
+│      USB-C (opladen)                │
+└─────────────────────────────────────┘
+         │ WiFi (Tuya LAN protocol)
+         ▼
+  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+  │  Hoofdlicht  │  │  Sfeerlamp   │  │  Leeslamp    │
+  │  LSC E27     │  │  LSC E27     │  │  LSC E27     │
+  └──────────────┘  └──────────────┘  └──────────────┘
+```
 
 ## Architectuur
 
-De code is opgebouwd in een paar logische lagen. Onderaan zit de **hardware laag**, daar wordt de knop uitgelezen (met debouncing), de LEDs aangestuurd en de batterijspanning gemeten via de ADC. Daarboven zit de **netwerk laag**: WiFi Manager regelt de verbinding, het Tuya LAN protocol praat direct met de lampen, en MQTT zorgt voor de koppeling met Home Assistant. De **applicatie laag** brengt alles samen: de knoplogica (kort/lang/dubbel drukken), het dimmen, en een simpele state machine die bijhoudt welke lamp actief is. Tot slot zijn er nog een paar **utility functies**: logging via Serial voor debugging, batterij monitoring die waarschuwt als het bijna op is, en deep sleep om de batterij te sparen.
+De firmware is opgebouwd in logische lagen. Onderaan zit de **hardware laag**: de ingebouwde knop op G39 (met debouncing) en de SK6812 RGB LED op G27 die per kleur laat zien welke lamp actief is. De **netwerk laag** combineert WiFi (via WiFi Manager), het Tuya LAN protocol (TCP/AES) voor directe lampbesturing, BLE GATT voor telefoonbediening, en MQTT voor Home Assistant. De **applicatie laag** brengt alles samen: knoplogica, BLE aanwezigheidsdetectie (herkent Koen's AirPods en Lotte's telefoon), zonberekening voor automatische schemering-detectie, en een webinterface met scenes en timer. De **power laag** beheert deep sleep na inactiviteit, met ext0 wakeup via de knop.
 
-Qua bestanden is het simpel gehouden: `config.h` bevat alle instelbare waarden (timings, pinnen, drempels), `secrets.h` bevat je persoonlijke credentials zoals lamp IP's, keys en MQTT-gegevens (die staat in `.gitignore` en gaat niet mee in git), en `ESP32_Tuya_Knop.ino` bevat de daadwerkelijke logica.
+Qua bestanden is het simpel gehouden: `config.h` bevat alle instelbare waarden, `secrets.h` bevat je persoonlijke credentials (staat in `.gitignore`), `EspTuya.h` is de Tuya protocol library, `webpagina.h` de embedded webinterface, en `ESP32_Tuya_Knop.ino` de daadwerkelijke logica.
 
 ### Software Diagram
 
 ```mermaid
 graph TB
-    subgraph Hardware["Hardware"]
-        BTN[Drukknop<br/>GPIO4]
-        LED1[LED 1 - Hoofdlicht<br/>GPIO16]
-        LED2[LED 2 - Sfeerlamp<br/>GPIO17]
-        LED3[LED 3 - Leeslamp<br/>GPIO18]
-        BAT[Batterij ADC<br/>GPIO35]
+    subgraph Hardware["Hardware (M5Stack Atom Lite)"]
+        BTN[Knop<br/>G39 ingebouwd]
+        LED[RGB LED<br/>G27 SK6812]
     end
 
     subgraph Knoplogica["Knop Afhandeling"]
         DEB[Debounce<br/>50ms]
         KORT[Kort drukken<br/>Volgende lamp]
-        LANG[Lang drukken<br/>Dimmen]
+        LANG[Lang drukken<br/>Dimmen ±20%]
         DUBBEL[Dubbel drukken<br/>Alles uit]
+        TRIPLE[Triple drukken<br/>Kleurmodus]
     end
 
     subgraph Core["ESP32 Core"]
         LOOP[Main Loop<br/>10ms cycle]
-        STATE[Status Bijhouden<br/>activeLamp - helderheid<br/>lampAan - dimRichting]
+        STATE[Status Bijhouden<br/>activeLamp · helderheid<br/>lampAan · dimRichting]
+    end
+
+    subgraph BLE["Bluetooth Low Energy"]
+        GATT[BLE GATT Server<br/>NimBLE · 5 characteristics]
+        PRES[Aanwezigheid<br/>UUID/MAC scan · 5s burst]
+        ZON[Zonberekening<br/>SolarCalculator · NTP]
     end
 
     subgraph Netwerk["Netwerk Stack"]
         WM[WiFi Manager<br/>Auto-connect / AP Portal]
         OTA[ArduinoOTA<br/>Firmware Updates]
         MQTT_C[MQTT Client<br/>PubSubClient]
+        WEB[Webinterface<br/>:8080 · scenes · timer]
     end
 
     subgraph Tuya["Tuya LAN Protocol"]
-        ET[EspTuya Library<br/>TCP - AES-128-ECB]
-        DP20[DP 20: Power<br/>aan/uit]
-        DP22[DP 22: Dim<br/>10-1000]
+        ET[EspTuya Library<br/>TCP · AES-128-ECB/GCM]
+        DP20[DP 20: Power]
+        DP22[DP 22: Dim]
+        DP24[DP 24: Kleur]
     end
 
     subgraph Lampen["LSC Smart Connect Lampen"]
-        L1[Hoofdlicht<br/>192.168.x.x]
-        L2[Sfeerlamp<br/>192.168.x.x]
-        L3[Leeslamp<br/>192.168.x.x]
+        L1[Hoofdlicht]
+        L2[Sfeerlamp]
+        L3[Leeslamp]
     end
 
     subgraph Power["Energiebeheer"]
-        SLEEP[Deep Sleep<br/>ext0 wakeup via knop]
-        BATMON[Batterij Monitor<br/>elke 30s]
+        SLEEP[Deep Sleep<br/>ext0 wakeup G39]
+        BAT[Atomic Battery Base<br/>200mAh · eigen LEDs]
     end
 
     subgraph HA["Home Assistant"]
@@ -110,33 +177,37 @@ graph TB
         DASH[Dashboard]
     end
 
-    BTN --> DEB --> KORT & LANG & DUBBEL
+    BTN --> DEB --> KORT & LANG & DUBBEL & TRIPLE
 
     KORT --> STATE
     LANG --> STATE
     DUBBEL --> STATE
+    TRIPLE --> STATE
 
     STATE --> ET
-    ET --> DP20 & DP22
-    DP20 --> L1 & L2 & L3
-    DP22 --> L1 & L2 & L3
+    ET --> DP20 & DP22 & DP24
+    DP20 & DP22 & DP24 --> L1 & L2 & L3
 
-    STATE --> LED1 & LED2 & LED3
+    STATE --> LED
+
+    GATT -->|commando's| STATE
+    PRES -->|thuis + donker| STATE
+    ZON -->|schemering| PRES
 
     LOOP --> STATE
     LOOP --> OTA
     LOOP --> MQTT_C
-    LOOP --> BATMON
+    LOOP --> WEB
 
     WM -.->|WiFi| ET
     MQTT_C <-->|status/cmd| MQTT_S
     MQTT_S <--> DASH
 
-    BAT --> BATMON
-    BATMON -->|kritiek| SLEEP
     LOOP -->|timeout| SLEEP
+    BAT -.->|5V boost| BTN
 
     classDef hw fill:#f9a825,stroke:#f57f17,color:#000
+    classDef ble fill:#7e57c2,stroke:#4527a0,color:#fff
     classDef net fill:#42a5f5,stroke:#1565c0,color:#fff
     classDef tuya fill:#66bb6a,stroke:#2e7d32,color:#fff
     classDef core fill:#ab47bc,stroke:#6a1b9a,color:#fff
@@ -144,35 +215,37 @@ graph TB
     classDef pwr fill:#ef5350,stroke:#b71c1c,color:#fff
     classDef ha fill:#26c6da,stroke:#00838f,color:#000
 
-    class BTN,LED1,LED2,LED3,BAT hw
-    class WM,OTA,MQTT_C net
-    class ET,DP20,DP22 tuya
-    class LOOP,STATE,DEB,KORT,LANG,DUBBEL core
+    class BTN,LED hw
+    class GATT,PRES,ZON ble
+    class WM,OTA,MQTT_C,WEB net
+    class ET,DP20,DP22,DP24 tuya
+    class LOOP,STATE,DEB,KORT,LANG,DUBBEL,TRIPLE core
     class L1,L2,L3 lamp
-    class SLEEP,BATMON pwr
+    class SLEEP,BAT pwr
     class MQTT_S,DASH ha
 ```
 
 ### Dataflow
 
 ```
-Knop --> Debounce --> Kort/Lang/Dubbel --> Status Update --> EspTuya --> Lamp (LAN)
-                                               |
-                                        LED Update + MQTT Publiceer
+Knop → Debounce → Kort/Lang/Dubbel/Triple → Status Update → EspTuya → Lamp (LAN)
+                                                  |
+                                        RGB LED + MQTT + BLE notify
 ```
 
 | Laag | Componenten | Taak |
 |------|-------------|------|
-| **Input** | Drukknop (GPIO4) | Kort / lang / dubbel detectie |
-| **Logica** | Main loop + state machine | Lamp selectie, dimmen, alles uit |
-| **Protocol** | EspTuya (TCP/AES) | Tuya v3.3 LAN commando's |
-| **Output** | 3x LED + 3x Lamp | Visuele feedback + lamp aansturing |
-| **Netwerk** | WiFi Manager, OTA, MQTT | Configuratie, updates, Home Assistant |
-| **Power** | Deep sleep + batterij monitor | Energiebesparing, bescherming |
+| **Input** | Knop (G39), BLE GATT, Webinterface, MQTT | Gebruikersinput via 4 kanalen |
+| **Logica** | Main loop + state machine | Lamp selectie, dimmen, kleuren, scenes, alles uit |
+| **Protocol** | EspTuya (TCP/AES-ECB + AES-GCM) | Tuya v3.3 + v3.5 LAN commando's |
+| **Output** | RGB LED + 3x Lamp | Visuele feedback + lamp aansturing |
+| **Netwerk** | WiFi Manager, OTA, MQTT, BLE | Configuratie, updates, Home Assistant, telefoon |
+| **Automatisering** | Aanwezigheid + zonberekening | Lampen aan bij thuiskomst in het donker |
+| **Power** | Deep sleep + ext0 wakeup | Batterij besparing, weken standby |
 
 ### Knop State Machine
 
-De drukknop wordt afgehandeld als een state machine met drie timers: debounce (50ms), lang-druk detectie (800ms) en dubbel-druk venster (400ms). Hieronder het volledige state diagram:
+De drukknop wordt afgehandeld als een state machine met drie timers: debounce (50ms), lang-druk detectie (800ms) en dubbel-druk venster (400ms).
 
 ```mermaid
 stateDiagram-v2
@@ -188,11 +261,17 @@ stateDiagram-v2
 
     LangDrukken --> Idle : Losgelaten
 
-    WachtOpDubbel --> DubbelDruk : Opnieuw ingedrukt<br/>binnen 400ms
+    WachtOpDubbel --> TelOp : Opnieuw ingedrukt<br/>binnen 400ms
     WachtOpDubbel --> KortDruk : Timeout 400ms<br/>(geen tweede druk)
+
+    TelOp --> WachtOpDubbel : Losgelaten<br/>(teller=2, wacht op 3e)
+    TelOp --> TripleDruk : Teller bereikt 3
+
+    WachtOpDubbel --> DubbelDruk : Timeout 400ms<br/>(teller=2)
 
     KortDruk --> Idle
     DubbelDruk --> Idle
+    TripleDruk --> Idle
     LangDrukken --> LangDrukken : Elke 800ms vastgehouden
 
     state KortDruk {
@@ -205,7 +284,12 @@ stateDiagram-v2
     state DubbelDruk {
         [*] --> AllesUit
         AllesUit --> ResetLEDs
-        ResetLEDs --> PubliceerUit
+        ResetLEDs --> DeepSleep5s
+    }
+
+    state TripleDruk {
+        [*] --> VolgendeKleur
+        VolgendeKleur --> StuurKleurTuya
     }
 
     state LangDrukken {
@@ -220,192 +304,73 @@ stateDiagram-v2
 
 | State | Conditie | Actie |
 |-------|----------|-------|
-| **Idle** | Wacht op knop | Niets, check deep sleep timeout |
+| **Idle** | Wacht op knop | Check deep sleep timeout |
 | **Debounce** | 50ms wachten | Filter contactdender |
 | **Ingedrukt** | Knop vast | Timer loopt voor lang-druk detectie |
-| **WachtOpDubbel** | Net losgelaten | 400ms venster voor tweede druk |
+| **WachtOpDubbel** | Net losgelaten | 400ms venster voor tweede/derde druk |
 | **KortDruk** | Timeout dubbel | `activeLamp++`, vorige uit, nieuwe aan |
-| **LangDrukken** | > 800ms vast | Helderheid +/- 20%, wissel richting bij grens |
-| **DubbelDruk** | 2x binnen 400ms | Alle lampen uit, reset state |
+| **LangDrukken** | > 800ms vast | Helderheid ±20%, wissel richting bij grens |
+| **DubbelDruk** | 2x binnen 400ms | Alle lampen uit, deep sleep na 5 seconden |
+| **TripleDruk** | 3x binnen 400ms | Volgende kleurmodus (8 modi cyclus) |
 
-> De variabele `dimRichting` wisselt automatisch bij de grenzen: bij 10% gaat hij omhoog, bij 100% weer omlaag. Zo hoef je maar te blijven vasthouden om heen en weer te dimmen.
+## BLE Bediening
 
-## Foto's
+De controller draait een BLE GATT server (NimBLE) met 5 characteristics:
 
-> *Wordt aangevuld met foto's van het bouwproces en eindresultaat.*
+| Characteristic | UUID | Type | Functie |
+|---------------|------|------|---------|
+| Lamp selectie | `...7891` | uint8 write | 0=uit, 1-3=lamp selecteren |
+| Helderheid | `...7892` | uint8 write | 0-100% |
+| Power | `...7893` | uint8 write | 0=uit, 1=aan |
+| Commando | `...7894` | string write | Tekstcommando's (aan, uit, dim 50, rood, etc.) |
+| Status | `...7895` | string read/notify | JSON status uitlezen |
 
-<!--
-Uncomment zodra de foto's gemaakt zijn:
+### Aanwezigheidsdetectie
 
-### Eindresultaat
-![Eindresultaat](images/01_eindresultaat.jpg)
+De controller scant elke 30 seconden (5 seconden burst) voor bekende BLE apparaten:
 
-### Binnenkant
-![Binnenkant](images/02_binnenkant.jpg)
+- **Apple apparaten** (AirPods): matching op service UUID (omdat iPhones hun MAC roteren)
+- **Android apparaten**: matching op MAC-adres
 
-### Breadboard prototype
-![Breadboard](images/03_breadboard.jpg)
+Als iemand thuiskomt **en** het is donker (berekend via zonberekening), gaan de lampen automatisch aan. Als iedereen weg is, gaan ze uit. Een handmatige "uit" actie blokkeert de automatisering voor 30 minuten.
 
-### Onderdelen
-![Onderdelen](images/06_onderdelen.jpg)
+## Webinterface
 
-### Aan de muur
-![Wandmontage](images/09_wandmontage.jpg)
--->
+Beschikbaar op `http://<ip>:8080/` met:
 
-## Hardware
+- Aan/uit knop per lamp
+- Helderheid slider
+- Kleurtemperatuur slider (warm ↔ koud)
+- 9 snelkleuren (wit, rood, groen, blauw, geel, paars, oranje, roze, cyaan)
+- 6 scenes (Film, Lezen, Feest, Relax, Nacht, Energie)
+- Timer (5, 15, 30, 60 minuten)
+- Status weergave (WiFi, aanwezigheid, uptime)
 
-### Benodigdheden
-
-| Onderdeel | Specificatie |
-|-----------|-------------|
-| ESP32 DevKit V1 | ESP-WROOM-32, dual-core, WiFi + Bluetooth |
-| Drukknop | 16mm metaal, momentary, panel mount |
-| Weerstand 10kΩ | 1/4W, pull-up voor drukknop |
-| Weerstanden 220Ω (3x) | Voorschakeling status LEDs |
-| LEDs 5mm (3x) | Status per lamp (rood/groen/blauw) |
-| Weerstanden 100kΩ (2x) | Spanningsdeler batterij monitoring |
-| Action lampen | LSC Smart Connect, E27, WiFi/Tuya |
-| Voeding | Micro-USB of 18650 batterij met TP4056 lader |
-| Behuizing | ABS project box ~130x70x45mm |
-
-Zie [`docs/Stuklijst_Woonkamer_Lamp_Controller.xlsx`](docs/Stuklijst_Woonkamer_Lamp_Controller.xlsx) voor de volledige stuklijst met prijzen en links naar Nederlandse webshops.
-
-### Componenten
-
-| | | |
-|:---:|:---:|:---:|
-| ![ESP32](images/componenten/esp32_devkit_v1.jpg) | ![Drukknop](images/componenten/drukknop_16mm.jpg) | ![Action lamp](images/componenten/action_lsc_lamp.jpg) |
-| ESP32 DevKit V1 | Drukknop 16mm | Action LSC lamp |
-| ![Batterij](images/componenten/batterij_18650.jpg) | ![TP4056](images/componenten/tp4056_lader.jpg) | ![Behuizing](images/componenten/behuizing_abs.jpg) |
-| 18650 batterij | TP4056 lader | ABS behuizing |
-
-### Bedrading
-
+De API endpoints zijn ook direct te gebruiken via Siri Shortcuts:
 ```
-ESP32 GPIO4  ──── Knop pin 1 ──── 10kΩ ──── 3V3     (drukknop + pull-up)
-ESP32 GND    ──── Knop pin 2
-ESP32 GPIO16 ──── 220Ω ──── LED 1 ──── GND           (status Hoofdlicht)
-ESP32 GPIO17 ──── 220Ω ──── LED 2 ──── GND           (status Sfeerlamp)
-ESP32 GPIO18 ──── 220Ω ──── LED 3 ──── GND           (status Leeslamp)
-ESP32 GPIO35 ──── 100kΩ ──┬── batterij +              (spanningsdeler)
-                   GND ──── 100kΩ ──┘
-ESP32 VIN    ──── USB 5V of TP4056 output
-ESP32 GND    ──── USB GND
+GET /api/aan          → lamp aan
+GET /api/uit          → lamp uit
+GET /api/dim/50       → dim 50%
+GET /api/kleur/rood   → rood
+GET /api/scene/film   → film scene
+GET /api/timer/30     → uit over 30 min
 ```
-
-Zie [`hardware/`](hardware/) voor de elektronische schema's en mechanische tekeningen.
-
-### Concept design
-
-Het ontwerp is gebaseerd op een compact wanddoosje, vergelijkbaar met een Hue dimmer switch:
-
-![Concept Design](hardware/concept_design.svg)
-
-## Software installeren
-
-### 1. Arduino IDE
-
-Download en installeer de Arduino IDE (v2.x) van [arduino.cc](https://www.arduino.cc/en/software).
-
-### 2. ESP32 board toevoegen
-
-In Arduino IDE: **File > Preferences > Additional Boards Manager URLs**, voeg toe:
-
-```
-https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
-```
-
-Ga naar **Tools > Board > Boards Manager**, zoek `esp32` en installeer.
-
-### 3. Libraries installeren
-
-Via **Sketch > Include Library > Manage Libraries**:
-- ArduinoJson
-- Crypto
-- WiFiManager (by tzapu)
-- PubSubClient (by Nick O'Leary)
-
-Handmatig toevoegen via **Sketch > Include Library > Add .ZIP Library**:
-- EspTuya
-
-### 4. Tuya local keys ophalen
-
-Om de lampen lokaal aan te sturen heb je de local keys nodig:
-
-```bash
-pip install tinytuya
-python -m tinytuya wizard
-```
-
-Volg de stappen (gratis iot.tuya.com account nodig). Noteer het IP-adres en de local key van elke lamp.
-
-### 5. Credentials instellen
-
-Kopieer `secrets.example.h` naar `secrets.h` en vul je eigen gegevens in:
-
-- Lamp IP-adressen en local keys
-- MQTT broker adres, gebruikersnaam en wachtwoord
-
-`secrets.h` staat in `.gitignore` en wordt niet meegecommit, zo blijven je credentials veilig.
-
-### 6. Testen
-
-Selecteer **Tools > Board > ESP32 Dev Module** en klik Upload. Open de Serial Monitor (115200 baud) en druk op de knop. Je ziet welke lamp wordt geschakeld.
-
-## Mappenstructuur
-
-```
-ESP32_Tuya_Knop/
-├── ESP32_Tuya_Knop.ino               De Arduino sketch (logica)
-├── config.h                          Instellingen (pinnen, timings, drempels)
-├── secrets.example.h                 Template voor credentials
-├── secrets.h                         Jouw credentials (NIET in git)
-├── CHANGELOG.md                      Versiegeschiedenis
-├── README.md                         Dit bestand
-├── LICENSE                           MIT licentie
-├── docs/
-│   └── Stuklijst_...xlsx             Stuklijst met prijzen en URLs
-├── hardware/
-│   ├── schema_elektronisch.svg       Elektronisch schema
-│   ├── concept_design.svg            Product concept rendering
-│   └── tekening_behuizing.svg        Mechanische tekening met maten
-└── images/
-    ├── ESP32_Tuya_Schema.png         Schema afbeelding
-    ├── componenten/                  Foto's van de gebruikte onderdelen
-    └── *.jpg                         Build foto's (volgen)
-```
-
-> **Let op:** `secrets.h` staat in `.gitignore` en wordt niet meegecommit. Gebruik `secrets.example.h` als template.
-
-## Lampen
-
-Dit project werkt met de **LSC Smart Connect** lampen van Action:
-
-| Variant | Watt | Lumen | Fitting | Prijs |
-|---------|------|-------|---------|-------|
-| Multicolor 3-pack | 8W | 700 lm | E27 | €12,95 |
-| Multicolor los | 9W | 806 lm | E27 | €6,95 |
-| Filament | 5.5W | 470 lm | E27 | €6,95 |
-
-Alle lampen werken via 2.4 GHz WiFi met het Tuya protocol. Ze zijn alleen verkrijgbaar in de fysieke Action winkel.
 
 ## MQTT & Home Assistant
 
-De controller publiceert zijn status via MQTT en kan ook commando's ontvangen. Hierdoor werkt hij naadloos samen met [Home Assistant](https://www.home-assistant.io/).
+De controller publiceert zijn status via MQTT en kan ook commando's ontvangen.
 
 ### Topics
 
 | Topic | Richting | Beschrijving |
 |-------|----------|-------------|
-| `woonkamer/lampcontroller/status` | Controller → HA | JSON met huidige lampstatus en helderheid |
-| `woonkamer/lampcontroller/cmd` | HA → Controller | Commando's om lampen te schakelen/dimmen |
-| `woonkamer/lampcontroller/batterij` | Controller → HA | Batterijspanning in volt (bijv. `3.85`) |
-| `woonkamer/lampcontroller/online` | Controller → HA | LWT topic, `online` of `offline` |
+| `.../status` | Controller → HA | JSON met lampstatus en helderheid |
+| `.../cmd` | HA → Controller | Commando's (lamp1_on, dim_50, alles_uit) |
+| `.../aanwezigheid` | Controller → HA | JSON: wie is thuis |
+| `.../donker` | Controller → HA | Bool: is het donker buiten |
+| `.../online` | Controller → HA | LWT: "online" of "offline" (bij deep sleep) |
 
 ### Status payload
-
-Bij elke wijziging publiceert de controller een JSON bericht op het status topic:
 
 ```json
 {
@@ -419,68 +384,84 @@ Bij elke wijziging publiceert de controller een JSON bericht op het status topic
 }
 ```
 
-### Commando's
+## Software installeren
 
-Stuur een van deze commando's naar het `cmd` topic om lampen aan te sturen vanuit Home Assistant:
+Zie [`HANDLEIDING.md`](HANDLEIDING.md) voor de complete stap-voor-stap handleiding. Kort samengevat:
 
-| Commando | Wat het doet |
-|----------|-------------|
-| `lamp1_on` | Hoofdlicht aan |
-| `lamp1_off` | Hoofdlicht uit |
-| `lamp2_dim_50` | Sfeerlamp dimmen naar 50% |
-| `alles_uit` | Alle lampen uit |
+1. Lampen toevoegen via Smart Life app
+2. Local keys ophalen via tinytuya
+3. Arduino IDE + ESP32 board + libraries installeren
+4. `secrets.example.h` kopiëren naar `secrets.h` en invullen
+5. Flashen naar M5Stack Atom Lite
+6. WiFi configureren via telefoon
 
-### Last Will & Testament
+### Libraries
 
-De controller stuurt bij verbinding een LWT bericht naar het `online` topic. Als de controller offline gaat (batterij leeg, WiFi weg, deep sleep) ziet Home Assistant dat meteen, het topic springt automatisch naar `offline`. Handig voor automatiseringen die rekening houden met of de knop bereikbaar is.
+- **FastLED** — RGB LED aansturing
+- **NimBLE-Arduino** (h2zero) — BLE GATT server + presence scanning
+- **SolarCalculator** — zonsopkomst/-ondergang berekening
+- **WiFiManager** (tzapu) — WiFi configuratie via captive portal
+- **PubSubClient** — MQTT client
+- **ArduinoJson** — JSON parsing
 
-### Waarom MQTT erbij?
+## Mappenstructuur
 
-De knop stuurt de lampen sowieso rechtstreeks aan via het Tuya LAN protocol, dat werkt altijd, ook als Home Assistant of het netwerk er even uit ligt. Maar met MQTT erbij kun je de lampstatus terugzien op je dashboard, automatiseringen bouwen (bijv. lampen uit als je van huis gaat), de knop combineren met andere slimme apparaten, en het batterijniveau monitoren vanuit Home Assistant.
-
-De LSC Smart Connect lampen van Action zijn sowieso al te integreren in Home Assistant via de [Tuya-integratie](https://www.home-assistant.io/integrations/tuya/) of [LocalTuya](https://github.com/rospogriern/localtuya). De meerwaarde van deze knop is dat hij ook werkt als Home Assistant of het netwerk er even uit ligt, alles gaat direct via het lokale Tuya LAN protocol.
-
-## OTA updates
-
-Je hoeft de ESP32 niet elke keer via USB aan te sluiten om nieuwe firmware te uploaden. Zolang hij aan staat en op hetzelfde WiFi-netwerk zit, kun je draadloos updaten.
-
-**Via Arduino IDE:**
-Ga naar **Tools > Port** en kies de netwerkpoort `lamp-controller`. Upload je sketch zoals je normaal zou doen.
-
-**Via PlatformIO:**
-```bash
-pio run --target upload --upload-port lamp-controller.local
+```
+esp32-tuya-knop/
+├── ESP32_Tuya_Knop.ino          Hoofdprogramma (logica)
+├── ESP32_Tuya_Knop/             Arduino IDE sketch folder
+│   └── (zelfde bestanden)
+├── config.h                     Instellingen (features, pinnen, timings)
+├── secrets.example.h            Template voor credentials
+├── secrets.h                    Jouw credentials (NIET in git)
+├── EspTuya.h                    Tuya LAN protocol library (v3.3 + v3.5)
+├── webpagina.h                  Embedded HTML/CSS/JS webinterface
+├── HANDLEIDING.md               Stap-voor-stap setup handleiding
+├── CHANGELOG.md                 Versiegeschiedenis
+├── ROADMAP.md                   Toekomstige features
+├── LICENSE                      MIT licentie
+├── hardware/                    Technische tekeningen
+└── images/componenten/          Foto's van de hardware
 ```
 
-> **Let op:** De ESP32 moet op hetzelfde WiFi-netwerk zitten als je computer. Als de netwerkpoort niet verschijnt, controleer dan of de ESP32 wakker is (niet in deep sleep) en of mDNS niet geblokkeerd wordt door je router.
+## Lampen
 
-## Toekomstige plannen
+Dit project werkt met de **LSC Smart Connect** lampen van Action:
 
-- [x] WiFi Manager (configuratie via telefoon bij eerste boot)
-- [x] Deep sleep modus (batterij besparing)
-- [x] Batterij niveau monitoring via LED
-- [x] Foutafhandeling als lamp niet bereikbaar is
-- [x] OTA firmware updates via WiFi
-- [x] Home Assistant / MQTT integratie
-- [x] Helderheid omhoog en omlaag (afwisselend)
-- [x] Status LEDs per lamp
-- [ ] Scenes (bijv. "filmavond", "lezen", "alles vol")
-- [ ] Web interface voor lamp configuratie
-- [ ] Meerdere knoppen / remote ondersteuning
+| Variant | Watt | Lumen | Fitting | Prijs |
+|---------|------|-------|---------|-------|
+| Multicolor 3-pack | 8W | 700 lm | E27 | €12,95 |
+| Multicolor los | 9W | 806 lm | E27 | €6,95 |
+| Filament | 5.5W | 470 lm | E27 | €6,95 |
+
+Alle lampen werken via 2.4 GHz WiFi met het Tuya protocol. Ze zijn alleen verkrijgbaar in de fysieke Action winkel.
 
 ## Wat ik heb geleerd
 
-Toen ik begon had ik alles in één groot `.ino` bestand staan: configuratie, credentials, logica, alles door elkaar. Dat werkte, maar het werd al snel onoverzichtelijk. Uiteindelijk heb ik de config en credentials naar aparte bestanden verplaatst. Als ik het opnieuw zou doen, zou ik dat meteen zo opzetten. Maar goed, je leert het pas als je er tegenaan loopt.
+Dit project is in meerdere iteraties gebouwd, en elke versie leerde me weer iets nieuws.
 
-Op een paar plekken gebruik ik nog `delay()` voor LED feedback, wat even de hele loop blokkeert. Voor een knop-controller maakt dat niet zoveel uit (je drukt toch maar één keer), maar in een groter project zou ik dat met `millis()` non-blocking doen. Hetzelfde geldt voor de Tuya-verbinding: die wordt nu per commando opnieuw opgezet. Dat werkt prima, maar het is niet supersnel. Een persistent connection zou beter zijn, alleen moet je dan ook reconnect-logica bouwen als de verbinding wegvalt. Dat soort afwegingen vind ik eigenlijk het interessantste aan dit project.
+**v1 → v2 (ESP32 DevKit):** Ik begon met alles in één `.ino` bestand. Dat werd al snel onleesbaar. Het scheiden van configuratie (`config.h`) en credentials (`secrets.h`) was een belangrijke les in code organisatie. Ook leerde ik hoe `delay()` je hele programma blokkeert — voor een knop-controller acceptabel, maar het besef was er.
 
-Qua testen heb ik vooral de Serial Monitor gebruikt: knop drukken, kijken of de juiste lamp schakelt, output nalezen. Een testframework zou netter zijn, maar voor embedded is dat een stuk lastiger dan bij "gewone" software. Dat is zeker iets waar ik me nog in wil verdiepen.
+**v2 → v3 (M5Stack Atom Lite):** De overstap naar de Atom Lite was meer dan een port. Ik moest leren hoe BLE en WiFi naast elkaar draaien op dezelfde ESP32 chip — dat gaat niet vanzelf. NimBLE was de oplossing: veel lichter dan Bluedroid, en met burst-scanning (5 seconden scan, 25 seconden pauze) geef je WiFi genoeg ruimte. De BLE GATT server opzetten met eigen service UUIDs en characteristics was nieuw voor mij. Het Tuya protocol reverse-engineeren met tinytuya en implementeren in een header-only library (AES-ECB voor v3.3, AES-GCM voor v3.5) was het meest technisch uitdagende onderdeel.
 
-Wat ik er uiteindelijk van heb geleerd gaat verder dan alleen code schrijven: WiFi protocollen, hoe MQTT werkt, hoe je credentials veilig houdt buiten je repository, en hoe je embedded software opzet zodat het ook over een paar maanden nog te begrijpen is. En misschien wel het belangrijkste: het hele traject van een idee naar iets dat daadwerkelijk aan de muur hangt en werkt. De volgende stap is het toevoegen van scenes en een web interface, en misschien een keer een fatsoenlijk testframework uitproberen.
+**v3.1 (Battery Base):** Het toevoegen van deep sleep klinkt simpel, maar je moet alles netjes afsluiten (BLE deinit, MQTT LWT offline publiceren) voordat je gaat slapen. De ext0 wakeup op G39 werkt goed, maar je moet rekening houden met de boot-tijd (~2s) na een deep sleep wake.
+
+**Wat ik er aan overhoud:** WiFi en BLE protocollen, hoe MQTT werkt, hoe je credentials veilig houdt, embedded power management, en het hele traject van idee → prototype → product. En misschien wel het belangrijkste: leren wanneer iets "goed genoeg" is om te shippen.
+
+## Skills gedemonstreerd
+
+- **Embedded C++** — Arduino framework, state machines, ISR-safe queues
+- **Bluetooth Low Energy** — GATT server, service/characteristic design, presence scanning, UUID matching
+- **WiFi** — station mode, captive portal, mDNS, HTTP server
+- **Tuya LAN Protocol** — TCP sockets, AES-128-ECB/GCM encryption, session negotiation, custom library
+- **MQTT** — QoS levels, LWT, retained messages, JSON payloads
+- **Power Management** — deep sleep, ext0 wakeup, BLE/WiFi coexistence optimization
+- **Web Development** — embedded HTTP server, REST API, responsive HTML/CSS/JS
+- **Hardware** — M5Stack ecosystem, GPIO mapping, RGB LED (SK6812/NeoPixel)
 
 ## Versiebeheer
 
-Dit project gebruikt [Semantic Versioning](https://semver.org/). Huidige versie: **v2.1.0**.
+Dit project gebruikt [Semantic Versioning](https://semver.org/). Huidige versie: **v3.1.0**.
 
 Zie [`CHANGELOG.md`](CHANGELOG.md) voor de volledige versiegeschiedenis.
 

@@ -5,22 +5,58 @@ Alle noemenswaardige wijzigingen aan dit project staan hier.
 Het formaat is gebaseerd op [Keep a Changelog](https://keepachangelog.com/nl/1.0.0/)
 en dit project gebruikt [Semantic Versioning](https://semver.org/lang/v2.0.0/).
 
+## [3.1.0] - 2026-03-15
+
+### Toegevoegd
+- Deep sleep na 60 seconden inactiviteit (batterij besparing)
+- Snelle sleep: 5 seconden na "alles uit" → deep sleep
+- Wake-up via ingebouwde knop (ext0 wakeup op G39)
+- Nette shutdown: BLE deinit + MQTT LWT offline voor sleep
+- Ondersteuning voor Atomic Battery Base (200mAh)
+
+### Gewijzigd
+- Hardware beschrijving bijgewerkt voor Battery Base
+- Firmware versie naar 3.1.0
+
+## [3.0.0] - 2026-03-08
+
+### Toegevoegd
+- Complete herschrijving voor **M5Stack Atom Lite** hardware
+- BLE GATT server (NimBLE) met 5 characteristics voor telefoonbediening
+- BLE aanwezigheidsdetectie: UUID matching (Apple) + MAC matching (Android)
+- Automatische lampen bij thuiskomst als het donker is
+- Zonberekening via SolarCalculator (burgerlijke schemering)
+- Webinterface op poort 8080 met scenes, timer, kleurkiezer
+- HTTP API endpoints voor Siri Shortcuts integratie
+- RGB LED feedback via ingebouwde SK6812 (kleur per lamp)
+- Tuya v3.5 protocol ondersteuning (AES-GCM, session key negotiation)
+- EspTuya.h: header-only Tuya LAN protocol library
+- Kleurmodus cyclus via triple-press (8 kleuren)
+- BLE commando queue (voorkomt stack overflow op NimBLE task)
+
+### Verwijderd
+- Externe drukknop, 3 losse LEDs, batterij ADC (nu ingebouwd in Atom Lite)
+- ESP32 DevKit V1 pin definities
+
+### Gewijzigd
+- Hardware platform: ESP32 DevKit V1 → M5Stack Atom Lite (ESP32-PICO-D4)
+- LED feedback: 3 aparte LEDs → 1 RGB LED met kleurcodering
+- Knop: externe GPIO4 → ingebouwde G39
+
 ## [2.1.0] - 2026-02-18
 
 ### Toegevoegd
 - Configuratie gescheiden van broncode (`config.h`)
 - Gevoelige gegevens geïsoleerd in `secrets.h` (niet in git)
 - `secrets.example.h` als template, kopiëren en invullen
-- MQTT Last Will & Testament (LWT), Home Assistant ziet meteen of de controller offline is
+- MQTT Last Will & Testament (LWT)
 - MQTT QoS niveaus per topic type
 - Versienummer in firmware en serial output
 - Architectuur documentatie in README
-- MQTT documentatie met voorbeeld payloads
 - CHANGELOG.md voor versiebeheer
 
 ### Gewijzigd
 - Code beter georganiseerd: configuratie, secrets en logica gescheiden
-- MQTT reconnect logt nu het versienummer mee
 
 ## [2.0.0] - 2026-02-15
 
@@ -37,7 +73,6 @@ en dit project gebruikt [Semantic Versioning](https://semver.org/lang/v2.0.0/).
 
 ### Gewijzigd
 - Complete herschrijving van v1.0
-- Knop detectie: kort, lang en dubbel drukken
 
 ## [1.0.0] - 2026-01-20
 

@@ -3,7 +3,7 @@
 Stap-voor-stap handleiding om je M5Stack Atom Lite te configureren als lamp controller voor Action LSC Smart Connect lampen.
 
 **Wat je nodig hebt:**
-- M5Stack Atom Lite + USB-C kabel
+- M5Stack Atom Lite + Atomic Battery Base (200mAh) + USB-C kabel
 - Computer (Mac of Windows)
 - Smartphone (iPhone of Android)
 - Action LSC Smart Connect lamp(en), aangesloten en werkend
@@ -227,7 +227,7 @@ De controller kan detecteren wie er thuis is via Bluetooth. Je hebt per persoon 
 Open Terminal:
 ```
 cd ~/Documents
-git clone https://github.com/frankgeujen31031966/esp32-tuya-knop.git
+git clone https://github.com/koenver-art/esp32-tuya-knop.git
 open esp32-tuya-knop/ESP32_Tuya_Knop/ESP32_Tuya_Knop.ino
 ```
 
