@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════
 //  Configuratie -Woonkamer Lamp Controller (M5Stack Atom Lite)
-//  Frank Geujen, 2026
+//  Koen Verhallen, 2026
 //
 //  Alle instellingen op één plek. Pas hier aan wat je nodig hebt.
 //  Gevoelige gegevens (wachtwoorden, keys) staan in secrets.h
@@ -10,7 +10,7 @@
 #define CONFIG_H
 
 // ── Versie ────────────────────────────────────────────────────────
-#define FIRMWARE_VERSIE  "3.0.0"
+#define FIRMWARE_VERSIE  "3.1.0"
 #define FIRMWARE_NAAM    "Woonkamer Lamp Controller"
 #define DEVICE_ID        "lamp-controller"
 
@@ -22,6 +22,7 @@
 #define FEATURE_PRESENCE     true     // BLE aanwezigheidsdetectie (via service UUID voor Apple apparaten)
 #define FEATURE_ZONBEREKENING true    // Zonsopkomst/-ondergang berekening
 #define FEATURE_WEB          true     // Webinterface met API
+#define FEATURE_DEEP_SLEEP   true     // Deep sleep na inactiviteit (voor batterij)
 
 // ── Lampen ────────────────────────────────────────────────────────
 #define MAX_LAMPEN  3     // maximaal aantal lampen (pas aan in secrets.h)
@@ -47,6 +48,12 @@
 #define LANG_DRUK_MS    800    // langer dan 800ms = lang drukken
 #define DUBBEL_WINDOW   400    // binnen 400ms nogmaals = dubbel
 #define DEBOUNCE_MS     50
+
+// ── Deep sleep ────────────────────────────────────────────────────
+// Atom Lite + Atomic Battery Base: slaap na inactiviteit om batterij te sparen
+// Wakker worden via drukknop (G39 ext0 wakeup)
+#define SLAAP_TIMEOUT_MS  60000   // na 60s zonder activiteit → slapen
+#define SLAAP_NA_UIT_MS   5000    // 5s na "alles uit" → slapen
 
 // ── Tuya DataPoints ───────────────────────────────────────────────
 // Specifiek voor de Action LSC Smart Connect lampen
@@ -113,7 +120,7 @@ struct Lamp {
 // Matching op service UUID (voor Apple apparaten die MAC roteren)
 // OF op MAC-adres (voor Android apparaten met vast MAC)
 struct BleApparaat {
-  const char* naam;            // bijv. "Frank"
+  const char* naam;            // bijv. "Koen"
   const char* serviceUUID;     // service UUID (voor Apple), of "" als MAC gebruikt wordt
   const char* macAdres;        // MAC-adres (voor Android), of "" als UUID gebruikt wordt
 };

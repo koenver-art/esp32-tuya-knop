@@ -1,5 +1,9 @@
 # Secrets (wachtwoorden, local keys)
-/secrets.h
+secrets.h
+ESP32_Tuya_Knop/secrets.h
+
+# Planning (intern)
+plans/
 
 # Installers en binaries
 *.exe
@@ -24,4 +28,3 @@ desktop.ini
 *~
 .vscode/
 .idea/
-plans/

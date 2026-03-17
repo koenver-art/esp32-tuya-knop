@@ -1,10 +1,9 @@
 // ═══════════════════════════════════════════════════════════════════
-//  Woonkamer Lamp Controller -Frank Geujen
-//  v3.0.0 — M5Stack Atom Lite editie
+//  Woonkamer Lamp Controller - Koen Verhallen
+//  v3.1.0 — M5Stack Atom Lite + Atomic Battery Base editie
 //
-//  ESP32 projectje om de Action lampen in de woonkamer te bedienen
-//  met de ingebouwde drukknop, via BLE vanaf je telefoon, en met
-//  automatische aanwezigheidsdetectie.
+//  Draadloze knop om de Action lampen in de woonkamer te bedienen.
+//  Ligt op de salontafel, geen kabels nodig — batterij gaat weken mee.
 //
 //  Knop (ingebouwd):
 //    Kort drukken  → wissel tussen lampen
@@ -20,7 +19,12 @@
 //    Lampen automatisch aan als het donker is en iemand thuiskomt
 //    Lampen automatisch uit als iedereen weg is
 //
-//  Hardware: M5Stack Atom Lite (ESP32-PICO-D4)
+//  Deep sleep:
+//    Slaapt na 60s inactiviteit of 5s na "alles uit"
+//    Wakker worden door op de knop te drukken
+//    Batterij Base LEDs tonen laadniveau (25/50/75/100%)
+//
+//  Hardware: M5Stack Atom Lite (ESP32-PICO-D4) + Atomic Battery Base (200mAh)
 //    - Knop op G39, RGB LED op G27, IR op G12 (toekomstig)
 //
 //  Instellingen: zie config.h en secrets.h
@@ -103,6 +107,7 @@ unsigned long laatsteScan         = 0;
 unsigned long laatsteNtpSync      = 0;
 unsigned long handmatigeOverride  = 0;  // tijdstip van laatste handmatige "uit"
 unsigned long timerUitTijd       = 0;  // millis() wanneer lamp uit moet (0 = geen timer)
+unsigned long allesUitTijd       = 0;  // tijdstip van laatste "alles uit" (voor snelle sleep)
 
 // ── Webserver ─────────────────────────────────────────────────
 #if FEATURE_WEB
@@ -354,6 +359,7 @@ void allesUit() {
   activeLamp = -1;
   helderheid = 100;
   dimRichting = false;
+  allesUitTijd = millis();
   updateLED();
   Serial.println("Alles uit.");
 }
@@ -1256,14 +1262,50 @@ void setupOTA() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+//  Deep sleep (voor Atomic Battery Base)
+// ═══════════════════════════════════════════════════════════════════
+
+#if FEATURE_DEEP_SLEEP
+void gaSlapen() {
+  Serial.println("Ga slapen... (druk knop om wakker te worden)");
+
+  // MQTT offline melden
+  if (FEATURE_MQTT && mqtt.connected()) {
+    mqtt.publish(MQTT_TOPIC_BASE "/online", "offline", true);
+    mqtt.disconnect();
+  }
+
+  // BLE netjes afsluiten
+  #if FEATURE_BLE || FEATURE_PRESENCE
+    NimBLEDevice::deinit(true);
+  #endif
+
+  // LED uit
+  toonUit();
+  delay(100);
+
+  // G39 wakeup: knop is actief laag, wake op LOW
+  esp_sleep_enable_ext0_wakeup((gpio_num_t)KNOP_PIN, LOW);
+  esp_deep_sleep_start();
+}
+#endif
+
+// ═══════════════════════════════════════════════════════════════════
 //  Setup
 // ═══════════════════════════════════════════════════════════════════
 
 void setup() {
   Serial.begin(115200);
   delay(500);
-  Serial.printf("\n=== %s v%s -Frank Geujen ===\n", FIRMWARE_NAAM, FIRMWARE_VERSIE);
-  Serial.println("Hardware: M5Stack Atom Lite");
+  Serial.printf("\n=== %s v%s - Koen Verhallen ===\n", FIRMWARE_NAAM, FIRMWARE_VERSIE);
+  Serial.println("Hardware: M5Stack Atom Lite + Atomic Battery Base");
+
+  // Wakeup reden
+  #if FEATURE_DEEP_SLEEP
+    if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0) {
+      Serial.println("Wakker geworden door knop!");
+    }
+  #endif
 
   // RGB LED initialiseren
   FastLED.addLeds<SK6812, RGB_LED_PIN, GRB>(led, 1);
@@ -1327,6 +1369,9 @@ void setup() {
     Serial.printf("  Zon            = lat %.2f, lon %.2f\n", LOCATIE_LAT, LOCATIE_LON);
     Serial.printf("  Donker         = %s\n", hetIsDonker ? "ja" : "nee");
   }
+  #if FEATURE_DEEP_SLEEP
+    Serial.printf("  Deep sleep     = na %ds inactiviteit\n", SLAAP_TIMEOUT_MS / 1000);
+  #endif
   #if FEATURE_WEB
     Serial.printf("  Web            = http://%s/\n", WiFi.localIP().toString().c_str());
   #endif
@@ -1496,17 +1541,32 @@ void loop() {
   }
 
   wasIngedrukt = ingedrukt;
+
+  // ── Deep sleep na inactiviteit ────────────────────────────────
+  #if FEATURE_DEEP_SLEEP
+    // Snel slapen na "alles uit" (5s) of na lange inactiviteit (60s)
+    if (activeLamp == -1) {
+      if (allesUitTijd > 0 && (nu - allesUitTijd >= SLAAP_NA_UIT_MS)) {
+        gaSlapen();
+      }
+      if (nu - laatsteActiviteit >= SLAAP_TIMEOUT_MS) {
+        gaSlapen();
+      }
+    }
+  #endif
+
   delay(10);
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  Hardware: M5Stack Atom Lite (ESP32-PICO-D4)
-//  ──────────────────────────────────────────────
-//  G39  ── ingebouwde drukknop (actief laag, externe pull-up)
+//  Hardware: M5Stack Atom Lite (ESP32-PICO-D4) + Atomic Battery Base (200mAh)
+//  ──────────────────────────────────────────────────────────────────────────
+//  G39  ── ingebouwde drukknop (actief laag, externe pull-up, ext0 wakeup)
 //  G27  ── ingebouwde SK6812 RGB LED (NeoPixel-compatible)
 //  G12  ── ingebouwde IR LED (gereserveerd)
 //  G26  ── Grove SDA (gereserveerd)
 //  G32  ── Grove SCL (gereserveerd)
 //
-//  Voeding: USB-C (5V)
+//  Voeding: Atomic Battery Base (200mAh LiPo, ETA9085E boost → 5V)
+//           Opladen via USB-C (schakelaar: ON=gebruik, OFF=opladen)
 // ═══════════════════════════════════════════════════════════════════
