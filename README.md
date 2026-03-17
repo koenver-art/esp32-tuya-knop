@@ -338,6 +338,8 @@ Als iemand thuiskomt **en** het is donker (berekend via zonberekening), gaan de 
 
 De controller draait een ingebouwde webserver met een **responsive, mobile-first webinterface** — ontworpen om op je telefoon te gebruiken als je op de bank zit. De hele pagina (HTML, CSS, JavaScript) is embedded in de firmware als PROGMEM en wordt in chunks verstuurd voor betrouwbare overdracht op de ESP32.
 
+![Webinterface op telefoon](images/webinterface_mobiel.png)
+
 Beschikbaar op `http://<ip>:8080/` met:
 
 - Aan/uit knop per lamp
