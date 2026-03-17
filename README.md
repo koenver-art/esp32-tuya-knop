@@ -14,11 +14,11 @@ Ik heb een MBO opleiding Mechatronica gedaan en werk inmiddels een paar jaar in 
 
 Het begon eigenlijk met een irritatie: elke avond drie verschillende lampen aan- en uitzetten via de Action-app op mijn telefoon. Telefoon zoeken, app openen, wachten tot hij verbindt, per lamp schakelen. Voor iets simpels als licht aan en uit voelde dat omslachtig.
 
-Toen dacht ik: dat moet toch simpeler kunnen? Gewoon een knopje, zoals vroeger, maar dan slim. Eén knop waarmee je door de lampen heen bladert, kunt dimmen en alles in één keer uit zet. En het moest draadloos op tafel kunnen liggen — geen kabel, geen gedoe.
+Toen dacht ik: dat moet toch simpeler kunnen? Gewoon een knopje, zoals vroeger, maar dan slim. Eén knop waarmee je door de lampen heen bladert, kunt dimmen, van kleur verandert en alles in één keer uit zet. En het moest draadloos op tafel kunnen liggen — geen kabel, geen gedoe.
 
 Na een eerste prototype op een ESP32 DevKit (v1 en v2, met breadboard, losse LEDs en een 18650 batterij) bleek dat te groot en te rommellig. Toen ontdekte ik de **M5Stack Atom Lite**: een ESP32 van 24×24mm met ingebouwde knop en RGB LED. Met de **Atomic Battery Base** eronder heb je een compleet draadloos apparaatje dat op de salontafel ligt en weken meegaat op één lading.
 
-Het project combineert veel van wat ik bij Mechatronica heb geleerd: embedded C++ op een microcontroller, draadloze protocollen (WiFi, BLE GATT, Tuya LAN), netwerkcommunicatie (MQTT, HTTP), en het hele traject van idee naar werkend product.
+Het project combineert veel van wat ik bij Mechatronica heb geleerd: embedded C++ op een microcontroller, draadloze protocollen (WiFi, BLE GATT, Tuya LAN), netwerkcommunicatie (MQTT, HTTP), een responsive webinterface voor bediening via je telefoon, en het hele traject van idee naar werkend product.
 
 Het is bewust een low-budget project. De Atom Lite kost een tientje, de batterij base ook, en de lampen komen van de Action. Het hele project is voor minder dan **€30** te bouwen. Geen dure hub, geen maandelijks abonnement, geen cloud, gewoon lokaal WiFi.
 
@@ -336,17 +336,19 @@ Als iemand thuiskomt **en** het is donker (berekend via zonberekening), gaan de 
 
 ## Webinterface
 
+De controller draait een ingebouwde webserver met een **responsive, mobile-first webinterface** — ontworpen om op je telefoon te gebruiken als je op de bank zit. De hele pagina (HTML, CSS, JavaScript) is embedded in de firmware als PROGMEM en wordt in chunks verstuurd voor betrouwbare overdracht op de ESP32.
+
 Beschikbaar op `http://<ip>:8080/` met:
 
 - Aan/uit knop per lamp
-- Helderheid slider
+- Helderheid slider (touch-friendly, werkt op mobiel)
 - Kleurtemperatuur slider (warm ↔ koud)
 - 9 snelkleuren (wit, rood, groen, blauw, geel, paars, oranje, roze, cyaan)
 - 6 scenes (Film, Lezen, Feest, Relax, Nacht, Energie)
 - Timer (5, 15, 30, 60 minuten)
-- Status weergave (WiFi, aanwezigheid, uptime)
+- Live status weergave (WiFi, aanwezigheid, uptime, countdown)
 
-De API endpoints zijn ook direct te gebruiken via Siri Shortcuts:
+De interface communiceert via een **REST API** met JSON responses — dezelfde endpoints zijn ook direct te gebruiken via Siri Shortcuts of curl:
 ```
 GET /api/aan          → lamp aan
 GET /api/uit          → lamp uit
@@ -408,20 +410,20 @@ Zie [`HANDLEIDING.md`](HANDLEIDING.md) voor de complete stap-voor-stap handleidi
 
 ```
 esp32-tuya-knop/
-├── ESP32_Tuya_Knop.ino          Hoofdprogramma (logica)
-├── ESP32_Tuya_Knop/             Arduino IDE sketch folder
-│   └── (zelfde bestanden)
-├── config.h                     Instellingen (features, pinnen, timings)
-├── secrets.example.h            Template voor credentials
-├── secrets.h                    Jouw credentials (NIET in git)
-├── EspTuya.h                    Tuya LAN protocol library (v3.3 + v3.5)
-├── webpagina.h                  Embedded HTML/CSS/JS webinterface
-├── HANDLEIDING.md               Stap-voor-stap setup handleiding
-├── CHANGELOG.md                 Versiegeschiedenis
+├── ESP32_Tuya_Knop/             Arduino IDE sketch folder (open dit in Arduino IDE)
+│   ├── ESP32_Tuya_Knop.ino      Hoofdprogramma (logica, ~1500 regels)
+│   ├── config.h                 Instellingen (features, pinnen, timings, BLE, MQTT)
+│   ├── secrets.example.h        Template voor credentials
+│   ├── secrets.h                Jouw credentials (NIET in git)
+│   ├── EspTuya.h                Tuya LAN protocol library (v3.3 + v3.5, AES-ECB/GCM)
+│   └── webpagina.h              Embedded responsive webinterface (HTML/CSS/JS)
+├── hardware/
+│   └── schema_elektronisch.svg  Systeem schema (Atom Lite + Battery Base + WiFi/BLE)
+├── images/componenten/          Foto's van de hardware
+├── HANDLEIDING.md               Stap-voor-stap setup handleiding (16 stappen)
+├── CHANGELOG.md                 Versiegeschiedenis (v1.0 → v3.1)
 ├── ROADMAP.md                   Toekomstige features
-├── LICENSE                      MIT licentie
-├── hardware/                    Technische tekeningen
-└── images/componenten/          Foto's van de hardware
+└── LICENSE                      MIT licentie
 ```
 
 ## Lampen
@@ -442,7 +444,7 @@ Dit project is in meerdere iteraties gebouwd, en elke versie leerde me weer iets
 
 **v1 → v2 (ESP32 DevKit):** Ik begon met alles in één `.ino` bestand. Dat werd al snel onleesbaar. Het scheiden van configuratie (`config.h`) en credentials (`secrets.h`) was een belangrijke les in code organisatie. Ook leerde ik hoe `delay()` je hele programma blokkeert — voor een knop-controller acceptabel, maar het besef was er.
 
-**v2 → v3 (M5Stack Atom Lite):** De overstap naar de Atom Lite was meer dan een port. Ik moest leren hoe BLE en WiFi naast elkaar draaien op dezelfde ESP32 chip — dat gaat niet vanzelf. NimBLE was de oplossing: veel lichter dan Bluedroid, en met burst-scanning (5 seconden scan, 25 seconden pauze) geef je WiFi genoeg ruimte. De BLE GATT server opzetten met eigen service UUIDs en characteristics was nieuw voor mij. Het Tuya protocol reverse-engineeren met tinytuya en implementeren in een header-only library (AES-ECB voor v3.3, AES-GCM voor v3.5) was het meest technisch uitdagende onderdeel.
+**v2 → v3 (M5Stack Atom Lite):** De overstap naar de Atom Lite was meer dan een port. Ik moest leren hoe BLE en WiFi naast elkaar draaien op dezelfde ESP32 chip — dat gaat niet vanzelf. NimBLE was de oplossing: veel lichter dan Bluedroid, en met burst-scanning (5 seconden scan, 25 seconden pauze) geef je WiFi genoeg ruimte. De BLE GATT server opzetten met eigen service UUIDs en characteristics was nieuw voor mij. Het Tuya protocol reverse-engineeren met tinytuya en implementeren in een header-only library (AES-ECB voor v3.3, AES-GCM voor v3.5) was het meest technisch uitdagende onderdeel. De webinterface was ook een leuk uitstapje: een complete responsive UI bouwen die in 4KB PROGMEM past, in chunks verstuurd wordt zodat de ESP32 niet out-of-memory gaat, en toch bruikbaar is op je telefoon met sliders, kleurknoppen en een timer.
 
 **v3.1 (Battery Base):** Het toevoegen van deep sleep klinkt simpel, maar je moet alles netjes afsluiten (BLE deinit, MQTT LWT offline publiceren) voordat je gaat slapen. De ext0 wakeup op G39 werkt goed, maar je moet rekening houden met de boot-tijd (~2s) na een deep sleep wake.
 
@@ -456,7 +458,7 @@ Dit project is in meerdere iteraties gebouwd, en elke versie leerde me weer iets
 - **Tuya LAN Protocol** — TCP sockets, AES-128-ECB/GCM encryption, session negotiation, custom library
 - **MQTT** — QoS levels, LWT, retained messages, JSON payloads
 - **Power Management** — deep sleep, ext0 wakeup, BLE/WiFi coexistence optimization
-- **Web Development** — embedded HTTP server, REST API, responsive HTML/CSS/JS
+- **Web Development** — embedded HTTP server, REST API, responsive mobile-first UI (HTML/CSS/JS), PROGMEM chunked transfer
 - **Hardware** — M5Stack ecosystem, GPIO mapping, RGB LED (SK6812/NeoPixel)
 
 ## Versiebeheer
