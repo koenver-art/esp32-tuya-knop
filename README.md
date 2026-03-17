@@ -18,7 +18,9 @@ Toen dacht ik: dat moet toch simpeler kunnen? Gewoon een knopje, zoals vroeger, 
 
 Na een eerste prototype op een ESP32 DevKit (v1 en v2, met breadboard, losse LEDs en een 18650 batterij) bleek dat te groot en te rommellig. Toen ontdekte ik de **M5Stack Atom Lite**: een ESP32 van 24×24mm met ingebouwde knop en RGB LED. Met de **Atomic Battery Base** eronder heb je een compleet draadloos apparaatje dat op de salontafel ligt en weken meegaat op één lading.
 
-Het project combineert veel van wat ik bij Mechatronica heb geleerd: embedded C++ op een microcontroller, draadloze protocollen (WiFi, BLE GATT, Tuya LAN), netwerkcommunicatie (MQTT, HTTP), een responsive webinterface voor bediening via je telefoon, en het hele traject van idee naar werkend product.
+Maar alleen een fysieke knop was niet genoeg. Lotte wilde ook de lampen kunnen bedienen zonder de codes te hoeven onthouden. Dus heb ik er een **webinterface** op gebouwd — een responsive pagina met een dark theme die je gewoon opent op je telefoon. Knoppen voor aan/uit, sliders voor helderheid en kleurtemperatuur, snelkleuren, scenes zoals "Film" of "Relax", en een timer. Die draait volledig op de ESP32 zelf, geen externe server nodig. En via **Bluetooth** kun je de lampen bedienen met Siri Shortcuts of een BLE app. De controller herkent zelfs automatisch wanneer we thuiskomen (via onze AirPods en telefoon) en zet de lampen aan als het donker is.
+
+Het project combineert veel van wat ik bij Mechatronica heb geleerd: embedded C++ op een microcontroller, draadloze protocollen (WiFi, BLE GATT, Tuya LAN), netwerkcommunicatie (MQTT, HTTP), responsive web development, en het hele traject van idee naar werkend product.
 
 Het is bewust een low-budget project. De Atom Lite kost een tientje, de batterij base ook, en de lampen komen van de Action. Het hele project is voor minder dan **€30** te bouwen. Geen dure hub, geen maandelijks abonnement, geen cloud, gewoon lokaal WiFi.
 
