@@ -6,7 +6,7 @@ Een draadloze knop om Action (LSC Smart Connect) lampen in de woonkamer te bedie
 
 ![Atom Lite met Battery Base op tafel](images/componenten/atom_lite_batterij_opladen.jpg)
 
-> *M5Stack Atom Lite + Atomic Battery Base — draadloos, oplaadbaar, past in je handpalm.*
+> *M5Stack Atom Lite + Atomic Battery Base — de rode LED geeft aan dat het Hoofdlicht actief is. USB-C kabel alleen nodig voor opladen.*
 
 ## Waarom dit project?
 
@@ -75,8 +75,8 @@ Geen breadboard, geen losse draden, geen behuizing nodig. De Atom Lite klikt op 
 
 | | | |
 |:---:|:---:|:---:|
-| ![Atom Lite + Battery Base](images/componenten/atom_lite_batterij_opladen.jpg) | ![Battery Base](images/componenten/atomic_battery_base.jpg) | ![LSC lamp](images/componenten/lsc_lamp_woonkamer.jpg) |
-| Atom Lite + Battery Base | Atomic Battery Base (200mAh) | Action LSC Smart Connect lamp |
+| ![Atom Lite in actie](images/componenten/atom_lite_batterij_opladen.jpg) | ![Battery Base](images/componenten/atomic_battery_base.jpg) | ![LSC lamp](images/componenten/lsc_lamp_woonkamer.jpg) |
+| Atom Lite in actie — rode LED = Hoofdlicht actief | Atomic Battery Base (200mAh) | Action LSC lamp op kleur in de woonkamer |
 
 ### Battery Base
 
