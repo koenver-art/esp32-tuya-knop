@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 620" width="900" height="620">
   <metadata>
-    <title>Elektronisch Schema — Woonkamer Lamp Controller</title>
+    <title>Systeem Schema — Woonkamer Lamp Controller v3.1</title>
     <creator>Koen Verhallen</creator>
     <date>2026</date>
   </metadata>
@@ -14,20 +14,15 @@
       .label { font-size: 11px; fill: #333; }
       .pin { font-size: 9px; fill: #0066aa; }
       .value { font-size: 10px; fill: #444; font-style: italic; }
-      .wire { stroke: #222; stroke-width: 1.5; fill: none; }
-      .wire-pwr { stroke: #cc0000; stroke-width: 1.5; fill: none; }
-      .wire-gnd { stroke: #000; stroke-width: 1.5; fill: none; }
-      .component { stroke: #333; stroke-width: 1.5; fill: none; }
-      .component-fill { stroke: #333; stroke-width: 1.5; fill: #f0f4f8; }
-      .esp-fill { stroke: #2266aa; stroke-width: 2; fill: #e8f0fa; }
-      .btn-fill { stroke: #555; stroke-width: 1.5; fill: #f5f5f5; }
-      .node { fill: #222; }
-      .gnd-sym { stroke: #000; stroke-width: 1.5; fill: none; }
-      .pwr-sym { stroke: #cc0000; stroke-width: 1.5; fill: none; }
       .note { font-size: 9px; fill: #777; }
-      .led-fill { stroke: #333; stroke-width: 1.5; }
-      .wifi-icon { stroke: #2266aa; stroke-width: 1.5; fill: none; }
+      .wire-wifi { stroke: #2266aa; stroke-width: 1.5; fill: none; stroke-dasharray: 6,3; }
+      .wire-ble { stroke: #7e57c2; stroke-width: 1.5; fill: none; stroke-dasharray: 4,4; }
+      .wire-pwr { stroke: #cc0000; stroke-width: 1.5; fill: none; }
+      .atom-fill { stroke: #333; stroke-width: 2; fill: #e8f0fa; }
+      .bat-fill { stroke: #333; stroke-width: 2; fill: #f0ece8; }
       .lamp-fill { stroke: #dd8800; stroke-width: 1.5; fill: #fff8e0; }
+      .phone-fill { stroke: #7e57c2; stroke-width: 1.5; fill: #f3e8ff; }
+      .ha-fill { stroke: #00838f; stroke-width: 1.5; fill: #e0f7fa; }
       .border { stroke: #999; stroke-width: 1; fill: none; }
       .titleblock { stroke: #999; stroke-width: 0.5; fill: #fafafa; }
     </style>
@@ -41,219 +36,166 @@
   <line x1="560" y1="565" x2="890" y2="565" stroke="#999" stroke-width="0.5"/>
   <line x1="560" y1="585" x2="890" y2="585" stroke="#999" stroke-width="0.5"/>
   <line x1="720" y1="545" x2="720" y2="610" stroke="#999" stroke-width="0.5"/>
-  <text x="575" y="559" class="label">Woonkamer Lamp Controller</text>
-  <text x="575" y="579" class="subtitle">Elektronisch Schema</text>
+  <text x="575" y="559" class="label">Woonkamer Lamp Controller v3.1</text>
+  <text x="575" y="579" class="subtitle">Systeem Schema</text>
   <text x="575" y="603" class="subtitle">Koen Verhallen — 2026</text>
-  <text x="735" y="559" class="label">Versie: 1.0</text>
+  <text x="735" y="559" class="label">Versie: 3.1</text>
   <text x="735" y="579" class="subtitle">Blad: 1 / 1</text>
   <text x="735" y="603" class="subtitle">MIT Licentie</text>
 
-  <!-- ==================== ESP32 DevKit V1 ==================== -->
-  <rect x="280" y="100" width="180" height="340" rx="6" class="esp-fill"/>
-  <text x="370" y="125" text-anchor="middle" class="title" fill="#2266aa">ESP32</text>
-  <text x="370" y="142" text-anchor="middle" class="subtitle">DevKit V1</text>
-  <text x="370" y="157" text-anchor="middle" class="pin">WROOM-32</text>
+  <!-- ==================== M5Stack Atom Lite ==================== -->
+  <rect x="300" y="120" width="200" height="180" rx="8" class="atom-fill"/>
+  <text x="400" y="148" text-anchor="middle" class="title" fill="#2266aa">M5Stack Atom Lite</text>
+  <text x="400" y="165" text-anchor="middle" class="subtitle">ESP32-PICO-D4</text>
+  <text x="400" y="180" text-anchor="middle" class="pin">WiFi + BLE 4.2</text>
 
-  <!-- ESP32 pins left side -->
-  <text x="295" y="195" class="pin">3V3</text>
-  <line x1="280" y1="190" x2="255" y2="190" class="wire-pwr"/>
-  <circle cx="280" cy="190" r="3" class="node"/>
+  <!-- Ingebouwde knop -->
+  <rect x="355" y="195" width="90" height="30" rx="4" fill="#dde4ee" stroke="#888" stroke-width="1"/>
+  <text x="400" y="215" text-anchor="middle" class="label">Knop (G39)</text>
+  <text x="400" y="228" text-anchor="middle" class="note">ext0 wakeup</text>
 
-  <text x="295" y="225" class="pin">GND</text>
-  <line x1="280" y1="220" x2="255" y2="220" class="wire-gnd"/>
-  <circle cx="280" cy="220" r="3" class="node"/>
+  <!-- RGB LED -->
+  <circle cx="340" y="255" r="8" fill="#66aaff" stroke="#2266aa" stroke-width="1.5"/>
+  <circle cx="340" y="255" r="12" fill="none" stroke="#2266aa" stroke-width="0.5" opacity="0.5"/>
+  <text x="360" y="259" class="pin">RGB LED (G27)</text>
+  <text x="360" y="270" class="note">SK6812 — kleur per lamp</text>
 
-  <text x="295" y="255" class="pin">GPIO4</text>
-  <line x1="280" y1="250" x2="230" y2="250" class="wire"/>
-  <circle cx="280" cy="250" r="3" class="node"/>
+  <!-- Pin labels -->
+  <text x="315" y="140" class="pin">24 × 24 mm</text>
 
-  <text x="295" y="355" class="pin">VIN (5V)</text>
-  <line x1="280" y1="350" x2="255" y2="350" class="wire-pwr"/>
-  <circle cx="280" cy="350" r="3" class="node"/>
+  <!-- USB-C label -->
+  <rect x="375" y="290" width="50" height="14" rx="2" fill="#555" stroke="#444" stroke-width="0.5"/>
+  <text x="400" y="300" text-anchor="middle" font-size="7" fill="#fff" font-family="Consolas, monospace">USB-C</text>
 
-  <text x="295" y="385" class="pin">GND</text>
-  <line x1="280" y1="380" x2="255" y2="380" class="wire-gnd"/>
-  <circle cx="280" cy="380" r="3" class="node"/>
+  <!-- ==================== Atomic Battery Base ==================== -->
+  <rect x="300" y="320" width="200" height="120" rx="8" class="bat-fill"/>
+  <text x="400" y="348" text-anchor="middle" class="label" font-weight="bold">Atomic Battery Base</text>
+  <text x="400" y="365" text-anchor="middle" class="subtitle">200mAh LiPo</text>
 
-  <!-- ESP32 pins right side -->
-  <text x="420" y="195" class="pin">WiFi</text>
+  <!-- Boost converter -->
+  <rect x="320" y="375" width="80" height="22" rx="3" fill="#e8e0d8" stroke="#999" stroke-width="1"/>
+  <text x="360" y="390" text-anchor="middle" class="note">ETA9085E boost</text>
+  <text x="360" y="402" text-anchor="middle" class="note">3.7V → 5V</text>
 
-  <!-- WiFi icon -->
-  <path d="M 495 175 Q 510 160, 525 175" class="wifi-icon"/>
-  <path d="M 500 182 Q 510 170, 520 182" class="wifi-icon"/>
-  <path d="M 505 189 Q 510 181, 515 189" class="wifi-icon"/>
-  <circle cx="510" cy="192" r="2" fill="#2266aa"/>
+  <!-- Switch -->
+  <rect x="420" y="375" width="60" height="22" rx="3" fill="#e8e0d8" stroke="#999" stroke-width="1"/>
+  <text x="450" y="390" text-anchor="middle" class="note">ON / OFF</text>
 
-  <!-- USB connector on ESP32 -->
-  <rect x="345" y="430" width="50" height="20" rx="2" class="component-fill"/>
-  <text x="370" y="444" text-anchor="middle" class="pin">Micro-USB</text>
+  <!-- Battery LEDs -->
+  <circle cx="330" cy="420" r="3" fill="#cc0000"/>
+  <circle cx="345" cy="420" r="3" fill="#cc0000"/>
+  <circle cx="360" cy="420" r="3" fill="#cc0000"/>
+  <circle cx="375" cy="420" r="3" fill="#cc0000"/>
+  <text x="395" y="423" class="note">25% 50% 75% 100%</text>
 
-  <!-- ==================== Pull-up weerstand R1 (10kΩ) ==================== -->
-  <!-- Horizontal wire from GPIO4 to junction -->
-  <line x1="230" y1="250" x2="150" y2="250" class="wire"/>
-  <circle cx="150" cy="250" r="3" class="node"/>
+  <!-- Charge LEDs -->
+  <circle cx="330" cy="435" r="3" fill="#4488ff"/>
+  <text x="345" y="438" class="note">laden</text>
+  <circle cx="395" cy="435" r="3" fill="#44cc44"/>
+  <text x="410" y="438" class="note">vol</text>
 
-  <!-- Vertical wire up from junction to resistor -->
-  <line x1="150" y1="250" x2="150" y2="215" class="wire"/>
+  <!-- Connection between Atom and Battery Base -->
+  <line x1="400" y1="305" x2="400" y2="320" class="wire-pwr"/>
+  <text x="415" y="315" class="pin" fill="#cc0000">5V via pin header</text>
 
-  <!-- Resistor (zigzag vertical) -->
-  <polyline points="150,215 140,210 160,200 140,190 160,180 150,175" class="component"/>
-  <text x="170" y="200" class="value">R1</text>
-  <text x="170" y="212" class="value">10kΩ</text>
-
-  <!-- Wire from resistor to 3V3 rail -->
-  <line x1="150" y1="175" x2="150" y2="155" class="wire-pwr"/>
-
-  <!-- 3V3 power symbol -->
-  <line x1="140" y1="155" x2="160" y2="155" class="pwr-sym"/>
-  <text x="150" y="148" text-anchor="middle" class="pin" fill="#cc0000">+3.3V</text>
-
-  <!-- 3V3 connection from ESP -->
-  <line x1="255" y1="190" x2="200" y2="190" class="wire-pwr"/>
-  <line x1="200" y1="190" x2="200" y2="155" class="wire-pwr"/>
-  <line x1="200" y1="155" x2="160" y2="155" class="wire-pwr"/>
-  <circle cx="200" cy="190" r="2.5" class="node" fill="#cc0000"/>
-
-  <!-- ==================== Drukknop S1 ==================== -->
-  <!-- Wire down from junction to button -->
-  <line x1="150" y1="250" x2="150" y2="290" class="wire"/>
-
-  <!-- Button symbol -->
-  <line x1="135" y1="290" x2="165" y2="290" class="component"/>
-  <line x1="150" y1="290" x2="150" y2="300" class="component" stroke-dasharray="2,2"/>
-  <line x1="130" y1="310" x2="170" y2="310" class="component"/>
-  <line x1="140" y1="300" x2="160" y2="300" class="component"/>
-  <!-- Push arrow -->
-  <line x1="175" y1="295" x2="175" y2="305" class="component"/>
-  <polyline points="172,303 175,308 178,303" class="component" fill="#333"/>
-
-  <text x="105" y="305" class="value">S1</text>
-  <text x="85" y="317" class="value">Drukknop</text>
-  <text x="85" y="329" class="note">16mm panel</text>
-  <text x="85" y="341" class="note">mount NO</text>
-
-  <!-- Wire from button to GND -->
-  <line x1="150" y1="310" x2="150" y2="345" class="wire-gnd"/>
-
-  <!-- GND symbol -->
-  <line x1="138" y1="345" x2="162" y2="345" class="gnd-sym"/>
-  <line x1="142" y1="350" x2="158" y2="350" class="gnd-sym"/>
-  <line x1="146" y1="355" x2="154" y2="355" class="gnd-sym"/>
-
-  <!-- GND connection from ESP -->
-  <line x1="255" y1="220" x2="210" y2="220" class="wire-gnd"/>
-  <line x1="210" y1="220" x2="210" y2="345" class="wire-gnd"/>
-  <line x1="210" y1="345" x2="162" y2="345" class="wire-gnd"/>
-
-  <!-- ==================== Voeding sectie ==================== -->
-  <text x="30" y="430" class="label" font-weight="bold">Voeding</text>
-
-  <!-- USB power -->
-  <rect x="30" y="440" width="70" height="35" rx="3" class="component-fill"/>
-  <text x="65" y="455" text-anchor="middle" class="pin">USB 5V</text>
-  <text x="65" y="467" text-anchor="middle" class="note">voeding</text>
-
-  <!-- Wire from USB to VIN -->
-  <line x1="100" y1="452" x2="240" y2="452" class="wire-pwr"/>
-  <line x1="240" y1="452" x2="240" y2="350" class="wire-pwr"/>
-  <line x1="240" y1="350" x2="255" y2="350" class="wire-pwr"/>
-  <text x="115" y="446" class="pin" fill="#cc0000">+5V</text>
-
-  <!-- GND from USB -->
-  <line x1="100" y1="465" x2="240" y2="465" class="wire-gnd"/>
-  <line x1="240" y1="465" x2="240" y2="380" class="wire-gnd"/>
-  <line x1="240" y1="380" x2="255" y2="380" class="wire-gnd"/>
-  <text x="115" y="478" class="pin">GND</text>
-
-  <!-- ==================== Batterij optie ==================== -->
-  <text x="30" y="510" class="note">Optioneel: 18650 + TP4056</text>
-
-  <!-- Battery symbol -->
-  <line x1="40" y1="525" x2="40" y2="540" stroke="#888" stroke-width="1"/>
-  <line x1="32" y1="528" x2="48" y2="528" stroke="#888" stroke-width="2"/>
-  <line x1="36" y1="534" x2="44" y2="534" stroke="#888" stroke-width="1"/>
-  <text x="55" y="535" class="note">3.7V 18650</text>
-
-  <!-- TP4056 box -->
-  <rect x="95" y="520" width="55" height="22" rx="2" stroke="#888" stroke-width="1" fill="#f8f8f8"/>
-  <text x="122" y="535" text-anchor="middle" class="note">TP4056</text>
-
-  <!-- Arrow from battery to TP4056 -->
-  <line x1="48" y1="531" x2="95" y2="531" stroke="#888" stroke-width="1"/>
-
-  <!-- Arrow from TP4056 to VIN label -->
-  <line x1="150" y1="531" x2="180" y2="531" stroke="#888" stroke-width="1"/>
-  <polyline points="176,528 180,531 176,534" stroke="#888" stroke-width="1" fill="none"/>
-  <text x="185" y="535" class="note">naar VIN</text>
-
-  <!-- ==================== Status LEDs ==================== -->
-  <text x="540" y="240" class="label" font-weight="bold">Status LEDs</text>
-  <text x="540" y="254" class="note">(optioneel)</text>
-
-  <!-- LED 1 -->
-  <polygon points="560,275 550,290 570,290" class="led-fill" fill="#ff4444"/>
-  <line x1="560" y1="290" x2="560" y2="300" class="component"/>
-  <line x1="553" y1="290" x2="567" y2="290" class="component"/>
-  <text x="578" y="285" class="note">LED1</text>
-  <!-- Arrow indicators for LED -->
-  <line x1="572" y1="272" x2="578" y2="267" class="component" stroke-width="0.8"/>
-  <line x1="575" y1="278" x2="581" y2="273" class="component" stroke-width="0.8"/>
-
-  <!-- LED 2 -->
-  <polygon points="620,275 610,290 630,290" class="led-fill" fill="#44cc44"/>
-  <line x1="620" y1="290" x2="620" y2="300" class="component"/>
-  <line x1="613" y1="290" x2="627" y2="290" class="component"/>
-  <text x="638" y="285" class="note">LED2</text>
-  <line x1="632" y1="272" x2="638" y2="267" class="component" stroke-width="0.8"/>
-  <line x1="635" y1="278" x2="641" y2="273" class="component" stroke-width="0.8"/>
-
-  <!-- LED 3 -->
-  <polygon points="680,275 670,290 690,290" class="led-fill" fill="#4488ff"/>
-  <line x1="680" y1="290" x2="680" y2="300" class="component"/>
-  <line x1="673" y1="290" x2="687" y2="290" class="component"/>
-  <text x="698" y="285" class="note">LED3</text>
-  <line x1="692" y1="272" x2="698" y2="267" class="component" stroke-width="0.8"/>
-  <line x1="695" y1="278" x2="701" y2="273" class="component" stroke-width="0.8"/>
-
-  <!-- ==================== WiFi lampen (conceptueel) ==================== -->
-  <text x="590" y="100" class="label" font-weight="bold">Woonkamer (WiFi)</text>
+  <!-- ==================== WiFi Lampen ==================== -->
+  <text x="740" y="115" class="label" font-weight="bold">Woonkamer (WiFi LAN)</text>
 
   <!-- Lamp 1 -->
-  <ellipse cx="570" cy="135" rx="18" ry="22" class="lamp-fill"/>
-  <rect x="562" y="155" width="16" height="8" rx="1" stroke="#dd8800" stroke-width="1" fill="#ddd"/>
-  <text x="570" y="139" text-anchor="middle" class="pin" fill="#dd8800">E27</text>
-  <text x="570" y="178" text-anchor="middle" class="note">Hoofdlicht</text>
+  <ellipse cx="660" cy="160" rx="20" ry="24" class="lamp-fill"/>
+  <rect x="650" y="182" width="20" height="10" rx="2" stroke="#dd8800" stroke-width="1" fill="#ddd"/>
+  <text x="660" y="165" text-anchor="middle" class="pin" fill="#dd8800">E27</text>
+  <text x="660" y="208" text-anchor="middle" class="note">Hoofdlicht</text>
 
   <!-- Lamp 2 -->
-  <ellipse cx="650" cy="135" rx="18" ry="22" class="lamp-fill"/>
-  <rect x="642" y="155" width="16" height="8" rx="1" stroke="#dd8800" stroke-width="1" fill="#ddd"/>
-  <text x="650" y="139" text-anchor="middle" class="pin" fill="#dd8800">E27</text>
-  <text x="650" y="178" text-anchor="middle" class="note">Sfeerlamp</text>
+  <ellipse cx="740" cy="160" rx="20" ry="24" class="lamp-fill"/>
+  <rect x="730" y="182" width="20" height="10" rx="2" stroke="#dd8800" stroke-width="1" fill="#ddd"/>
+  <text x="740" y="165" text-anchor="middle" class="pin" fill="#dd8800">E27</text>
+  <text x="740" y="208" text-anchor="middle" class="note">Sfeerlamp</text>
 
   <!-- Lamp 3 -->
-  <ellipse cx="730" cy="135" rx="18" ry="22" class="lamp-fill"/>
-  <rect x="722" y="155" width="16" height="8" rx="1" stroke="#dd8800" stroke-width="1" fill="#ddd"/>
-  <text x="730" y="139" text-anchor="middle" class="pin" fill="#dd8800">E27</text>
-  <text x="730" y="178" text-anchor="middle" class="note">Leeslamp</text>
+  <ellipse cx="820" cy="160" rx="20" ry="24" class="lamp-fill"/>
+  <rect x="810" y="182" width="20" height="10" rx="2" stroke="#dd8800" stroke-width="1" fill="#ddd"/>
+  <text x="820" y="165" text-anchor="middle" class="pin" fill="#dd8800">E27</text>
+  <text x="820" y="208" text-anchor="middle" class="note">Leeslamp</text>
 
-  <!-- WiFi zigzag lines from ESP to lamps -->
-  <path d="M 510 185 C 530 175, 540 160, 555 145" stroke="#2266aa" stroke-width="1" fill="none" stroke-dasharray="4,3"/>
-  <path d="M 510 185 C 540 170, 560 155, 635 140" stroke="#2266aa" stroke-width="1" fill="none" stroke-dasharray="4,3"/>
-  <path d="M 510 185 C 550 165, 600 150, 715 140" stroke="#2266aa" stroke-width="1" fill="none" stroke-dasharray="4,3"/>
+  <!-- WiFi connections to lamps -->
+  <path d="M 500 180 C 540 170, 580 160, 640 160" class="wire-wifi"/>
+  <path d="M 500 185 C 550 175, 600 165, 720 160" class="wire-wifi"/>
+  <path d="M 500 190 C 560 180, 640 170, 800 160" class="wire-wifi"/>
 
-  <text x="530" y="165" class="note" fill="#2266aa">Tuya LAN</text>
-  <text x="530" y="177" class="note" fill="#2266aa">protocol</text>
+  <text x="560" y="155" class="note" fill="#2266aa">Tuya LAN protocol</text>
+  <text x="560" y="167" class="note" fill="#2266aa">TCP/AES-ECB (v3.3)</text>
+  <text x="560" y="179" class="note" fill="#2266aa">TCP/AES-GCM (v3.5)</text>
+
+  <!-- ==================== BLE Telefoon ==================== -->
+  <rect x="620" y="300" width="140" height="80" rx="10" class="phone-fill"/>
+  <text x="690" y="325" text-anchor="middle" class="label" fill="#7e57c2">Smartphone</text>
+  <text x="690" y="342" text-anchor="middle" class="note">BLE GATT client</text>
+  <text x="690" y="356" text-anchor="middle" class="note">nRF Connect / Siri</text>
+  <text x="690" y="370" text-anchor="middle" class="note">Shortcuts / Web</text>
+
+  <!-- BLE connection -->
+  <path d="M 500 240 C 530 260, 570 290, 620 320" class="wire-ble"/>
+  <text x="540" y="270" class="note" fill="#7e57c2">BLE GATT</text>
+  <text x="540" y="282" class="note" fill="#7e57c2">5 characteristics</text>
+
+  <!-- ==================== Aanwezigheid ==================== -->
+  <rect x="620" y="410" width="140" height="60" rx="6" class="phone-fill"/>
+  <text x="690" y="435" text-anchor="middle" class="label" fill="#7e57c2">Aanwezigheid</text>
+  <text x="690" y="450" text-anchor="middle" class="note">Koen: AirPods UUID</text>
+  <text x="690" y="462" text-anchor="middle" class="note">Lotte: telefoon MAC</text>
+
+  <!-- BLE scan connection -->
+  <path d="M 500 260 C 530 310, 560 380, 620 430" class="wire-ble"/>
+  <text x="530" y="360" class="note" fill="#7e57c2">BLE scan burst</text>
+  <text x="530" y="372" class="note" fill="#7e57c2">5s / 30s interval</text>
+
+  <!-- ==================== Home Assistant ==================== -->
+  <rect x="50" y="150" width="160" height="80" rx="8" class="ha-fill"/>
+  <text x="130" y="178" text-anchor="middle" class="label" fill="#00838f">Home Assistant</text>
+  <text x="130" y="195" text-anchor="middle" class="note">MQTT Broker</text>
+  <text x="130" y="210" text-anchor="middle" class="note">status / cmd / LWT</text>
+  <text x="130" y="222" text-anchor="middle" class="note">aanwezigheid / donker</text>
+
+  <!-- MQTT connection -->
+  <line x1="210" y1="190" x2="300" y2="190" class="wire-wifi"/>
+  <text x="240" y="183" class="note" fill="#2266aa">MQTT</text>
+
+  <!-- ==================== Webinterface ==================== -->
+  <rect x="50" y="280" width="160" height="60" rx="8" fill="#e8ffe8" stroke="#44aa44" stroke-width="1.5"/>
+  <text x="130" y="305" text-anchor="middle" class="label" fill="#2e7d32">Webinterface</text>
+  <text x="130" y="320" text-anchor="middle" class="note">http://&lt;ip&gt;:8080</text>
+  <text x="130" y="332" text-anchor="middle" class="note">scenes · timer · kleur</text>
+
+  <!-- HTTP connection -->
+  <line x1="210" y1="310" x2="300" y2="250" class="wire-wifi"/>
+  <text x="240" y="270" class="note" fill="#2266aa">HTTP</text>
+
+  <!-- ==================== Deep Sleep ==================== -->
+  <rect x="50" y="390" width="160" height="70" rx="8" fill="#fff0f0" stroke="#cc4444" stroke-width="1.5"/>
+  <text x="130" y="415" text-anchor="middle" class="label" fill="#cc4444">Deep Sleep</text>
+  <text x="130" y="432" text-anchor="middle" class="note">Na 60s inactiviteit</text>
+  <text x="130" y="444" text-anchor="middle" class="note">Na 5s "alles uit"</text>
+  <text x="130" y="456" text-anchor="middle" class="note">Wake: knop G39 (ext0)</text>
+
+  <!-- Sleep connection -->
+  <line x1="210" y1="420" x2="300" y2="350" stroke="#cc4444" stroke-width="1" stroke-dasharray="3,3" fill="none"/>
 
   <!-- ==================== Legenda ==================== -->
-  <rect x="20" y="560" width="250" height="45" rx="3" fill="#fafafa" stroke="#ccc" stroke-width="0.5"/>
-  <text x="30" y="576" class="note">Legenda:</text>
-  <line x1="75" y1="572" x2="100" y2="572" class="wire-pwr"/>
-  <text x="105" y="576" class="note">Voeding (+)</text>
-  <line x1="155" y1="572" x2="180" y2="572" class="wire-gnd"/>
-  <text x="185" y="576" class="note">GND</text>
-  <line x1="75" y1="592" x2="100" y2="592" class="wire"/>
-  <text x="105" y="596" class="note">Signaal</text>
-  <line x1="155" y1="592" x2="180" y2="592" stroke="#2266aa" stroke-width="1" stroke-dasharray="4,3" fill="none"/>
-  <text x="185" y="596" class="note">WiFi</text>
+  <rect x="20" y="530" width="400" height="50" rx="3" fill="#fafafa" stroke="#ccc" stroke-width="0.5"/>
+  <text x="30" y="548" class="note" font-weight="bold">Legenda:</text>
+
+  <line x1="90" y1="544" x2="120" y2="544" class="wire-wifi"/>
+  <text x="125" y="548" class="note">WiFi (Tuya/MQTT/HTTP)</text>
+
+  <line x1="90" y1="562" x2="120" y2="562" class="wire-ble"/>
+  <text x="125" y="566" class="note">Bluetooth LE</text>
+
+  <line x1="250" y1="544" x2="280" y2="544" class="wire-pwr"/>
+  <text x="285" y="548" class="note">Voeding (5V)</text>
+
+  <rect x="250" y="556" width="30" height="12" rx="2" fill="#e8f0fa" stroke="#333" stroke-width="1"/>
+  <text x="285" y="566" class="note">Hardware module</text>
 
 </svg>
