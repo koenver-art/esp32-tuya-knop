@@ -55,8 +55,8 @@
   <text x="400" y="228" text-anchor="middle" class="note">ext0 wakeup</text>
 
   <!-- RGB LED -->
-  <circle cx="340" y="255" r="8" fill="#66aaff" stroke="#2266aa" stroke-width="1.5"/>
-  <circle cx="340" y="255" r="12" fill="none" stroke="#2266aa" stroke-width="0.5" opacity="0.5"/>
+  <circle cx="340" cy="255" r="8" fill="#66aaff" stroke="#2266aa" stroke-width="1.5"/>
+  <circle cx="340" cy="255" r="12" fill="none" stroke="#2266aa" stroke-width="0.5" opacity="0.5"/>
   <text x="360" y="259" class="pin">RGB LED (G27)</text>
   <text x="360" y="270" class="note">SK6812 — kleur per lamp</text>
 
