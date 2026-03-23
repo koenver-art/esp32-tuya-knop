@@ -119,7 +119,11 @@ double zonTransit          = 0.0;  // uur UTC
 double burgerlijkeDageraad = 0.0;  // uur UTC
 double burgerlijkeSchemer  = 0.0;  // uur UTC
 bool   ntpGesynchroniseerd = false;
+bool   ntpBetrouwbaar      = false;  // false als sync te lang geleden is
+unsigned long laatsteSuccesvolleSync = 0;  // millis() van laatste geslaagde NTP sync
 bool   hetIsDonker         = false;
+bool   wasDonker           = false;  // vorige donker-status voor edge-detectie
+unsigned long opstartTijd  = 0;      // millis() bij boot, voor opstart-graceperiod
 
 // ── Aanwezigheid ────────────────────────────────────────────────
 struct ApparaatStatus {
@@ -471,11 +475,14 @@ void berekenZonTijden() {
 
 bool isDonker() {
   #if FEATURE_ZONBEREKENING
-    if (!ntpGesynchroniseerd) return false;  // D-006: veilige default
+    if (!ntpGesynchroniseerd || !ntpBetrouwbaar) return false;  // D-006: veilige default
 
     time_t nu = time(nullptr);
     struct tm utc;
     gmtime_r(&nu, &utc);
+
+    // Extra sanity: als tijd ongeldig is, niet vertrouwen
+    if (utc.tm_year + 1900 < 2025) return false;
 
     double uurUTC = utc.tm_hour + utc.tm_min / 60.0 + utc.tm_sec / 3600.0;
     hetIsDonker = (uurUTC < burgerlijkeDageraad) || (uurUTC > burgerlijkeSchemer);
@@ -503,13 +510,22 @@ void syncNTP() {
     poging++;
   }
 
-  if (poging < 10) {
-    ntpGesynchroniseerd = true;
-    Serial.printf("NTP OK! Lokale tijd: %02d:%02d:%02d\n", ti.tm_hour, ti.tm_min, ti.tm_sec);
-    berekenZonTijden();
-  } else {
+  if (poging >= 10) {
     Serial.println("NTP sync mislukt, probeer later opnieuw.");
+    return;
   }
+
+  // Sanity check: jaar moet realistisch zijn (ESP32 zonder RTC start op 1970)
+  if (ti.tm_year + 1900 < 2025) {
+    Serial.printf("NTP: ongeldig jaar %d, verworpen.\n", ti.tm_year + 1900);
+    return;
+  }
+
+  ntpGesynchroniseerd = true;
+  ntpBetrouwbaar = true;
+  laatsteSuccesvolleSync = millis();
+  Serial.printf("NTP OK! Lokale tijd: %02d:%02d:%02d\n", ti.tm_hour, ti.tm_min, ti.tm_sec);
+  berekenZonTijden();
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -753,6 +769,15 @@ void checkAanwezigheid() {
   bool nuIemandThuis = iemandThuis();
   bool nuDonker = isDonker();
 
+  // Opstart-graceperiod: na reboot geen auto-aan totdat presence stabiel is
+  bool inGracePeriod = (nu - opstartTijd) < OPSTART_GRACE_MS;
+  if (inGracePeriod) {
+    // Wel status bijhouden, maar geen lampen aansturen
+    iemandWasThuis = nuIemandThuis;
+    wasDonker = nuDonker;
+    return;
+  }
+
   // Edge: iemand komt thuis + het is donker → lampen aan
   if (nuIemandThuis && !iemandWasThuis && nuDonker) {
     // Check handmatige override
@@ -769,7 +794,7 @@ void checkAanwezigheid() {
   }
 
   // Edge: het wordt donker terwijl iemand thuis is → lampen aan
-  if (nuIemandThuis && nuDonker && activeLamp < 0) {
+  if (nuIemandThuis && nuDonker && !wasDonker && activeLamp < 0) {
     if (handmatigeOverride == 0 || (nu - handmatigeOverride) > OVERRIDE_TIMEOUT_MS) {
       Serial.println("Auto-aan: het wordt donker en iemand is thuis!");
       activeLamp = 0;
@@ -786,6 +811,7 @@ void checkAanwezigheid() {
   }
 
   iemandWasThuis = nuIemandThuis;
+  wasDonker = nuDonker;
 }
 
 #endif // FEATURE_PRESENCE
@@ -1353,6 +1379,7 @@ void setup() {
   #endif
 
   laatsteActiviteit = millis();
+  opstartTijd = millis();
 
   // Geheugen check
   Serial.printf("Vrij geheugen: %d bytes\n", ESP.getFreeHeap());
@@ -1420,6 +1447,13 @@ void loop() {
     }
     toonUit();
     updateLED();
+
+    // Na WiFi herstel: forceer NTP re-sync (klok kan gedrift zijn)
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.println("WiFi hersteld, forceer NTP sync...");
+      syncNTP();
+      laatsteNtpSync = millis();
+    }
   }
 
   // ── BLE commando queue verwerken (op main stack) ──────────────
@@ -1466,8 +1500,16 @@ void loop() {
     }
   #endif
 
-  // NTP hersynch (elke uur)
-  if (nu - laatsteNtpSync >= NTP_SYNC_INTERVAL_MS) {
+  // NTP staleness check: markeer als onbetrouwbaar na te lang zonder sync
+  if (ntpBetrouwbaar && laatsteSuccesvolleSync > 0 &&
+      (nu - laatsteSuccesvolleSync) > NTP_VERTROUW_MAX_MS) {
+    ntpBetrouwbaar = false;
+    Serial.println("NTP: tijd onbetrouwbaar (te lang geen sync).");
+  }
+
+  // NTP hersynch: normaal elke 30 min, bij mislukte sync elke 5 min
+  unsigned long ntpInterval = ntpBetrouwbaar ? NTP_SYNC_INTERVAL_MS : NTP_RETRY_INTERVAL_MS;
+  if (nu - laatsteNtpSync >= ntpInterval) {
     syncNTP();
     laatsteNtpSync = nu;
   }
@@ -1475,12 +1517,12 @@ void loop() {
   // Zonberekening herberekenen (elke uur)
   #if FEATURE_ZONBEREKENING
     if (nu - laatsteZonCheck >= ZON_CHECK_INTERVAL_MS) {
-      bool wasDonker = hetIsDonker;
+      bool vorigeDonker = hetIsDonker;
       berekenZonTijden();
       isDonker();
       laatsteZonCheck = nu;
 
-      if (hetIsDonker != wasDonker) {
+      if (hetIsDonker != vorigeDonker) {
         Serial.printf("Donker status gewijzigd: %s\n", hetIsDonker ? "donker" : "licht");
         publiceerDonker();
       }

@@ -81,6 +81,7 @@
 #define SCAN_INTERVAL_MS     30000    // tijd tussen scans (30s)
 #define PRESENCE_TIMEOUT_MS  300000   // 5 minuten geen signaal = afwezig
 #define OVERRIDE_TIMEOUT_MS  1800000  // 30 min geen auto-on na handmatige uit
+#define OPSTART_GRACE_MS     90000   // 90s na boot geen auto-aan (presence stabilisatie)
 
 // BLE scan parameters (voor WiFi coëxistentie)
 // Scan window moet kleiner zijn dan scan interval
@@ -89,7 +90,9 @@
 
 // ── Zonberekening ───────────────────────────────────────────────
 #define ZON_CHECK_INTERVAL_MS 3600000  // herbereken elke uur (1u)
-#define NTP_SYNC_INTERVAL_MS  3600000  // NTP sync elke uur
+#define NTP_SYNC_INTERVAL_MS  1800000  // NTP sync elke 30 min (ESP32 crystal drift ~5-20 ppm)
+#define NTP_RETRY_INTERVAL_MS  300000  // bij mislukte sync: opnieuw na 5 min
+#define NTP_VERTROUW_MAX_MS  7200000  // na 2 uur zonder sync: tijd onbetrouwbaar
 #define NTP_SERVER_1         "pool.ntp.org"
 #define NTP_SERVER_2         "time.nist.gov"
 
